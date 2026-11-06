@@ -18,7 +18,7 @@ function LouderLogo() {
         </svg>
         <span className="text-white font-bold text-xl tracking-widest uppercase">Louder</span>
       </div>
-      <p className="text-zinc-500 text-xs tracking-widest uppercase">Admin Portal Registration</p>    </div>
+    </div>
   );
 }
 
@@ -47,7 +47,7 @@ export default function RegisterPage() {
     }
     setLoading(true);
     try {
-      const res = await authApi.register({ name: form.name, email: form.email, password: form.password, role: "admin" });
+      const res = await authApi.register({ name: form.name, email: form.email, password: form.password });
       if (res.ok) {
         router.push("/login");
       } else {
@@ -105,7 +105,7 @@ export default function RegisterPage() {
                   </svg>
                   <input
                     type="text"
-                    placeholder="Nama Admin Lengkap Di Sini"
+                    placeholder="Nama Lengkap"
                     value={form.name}
                     onChange={set("name")}
                     onFocus={() => setFocused("name")}
@@ -126,7 +126,7 @@ export default function RegisterPage() {
                   </svg>
                   <input
                     type="email"
-                    placeholder="admin@louder.com"
+                    placeholder="email@domain.com"
                     value={form.email}
                     onChange={set("email")}
                     onFocus={() => setFocused("email")}

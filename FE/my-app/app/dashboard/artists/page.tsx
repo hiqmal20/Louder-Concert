@@ -14,9 +14,6 @@ interface Artist {
   phone?: string;
   status?: string;
   photo_url?: string;
-  image?: string;
-  photo?: string;
-  eventCount?: number;
 }
 
 // Predefined genres — admin can also type custom
@@ -33,14 +30,7 @@ const PRESET_GENRES = [
 const PAGE_SIZE = 8;
 
 const genreColor = (genre?: string) => {
-  const g = (genre ?? "").toLowerCase();
-  if (g.includes("electronic") || g.includes("edm") || g.includes("techno") || g.includes("house") || g.includes("trance")) return "bg-blue-600";
-  if (g.includes("rock") || g.includes("metal") || g.includes("punk") || g.includes("alternative")) return "bg-red-700";
-  if (g.includes("hip") || g.includes("rap") || g.includes("r&b")) return "bg-amber-600";
-  if (g.includes("jazz") || g.includes("blues") || g.includes("soul")) return "bg-indigo-600";
-  if (g.includes("pop") || g.includes("k-pop") || g.includes("indie")) return "bg-pink-600";
-  if (g.includes("classical") || g.includes("acoustic") || g.includes("folk")) return "bg-teal-600";
-  return "bg-zinc-600";
+  return "bg-zinc-800 border border-zinc-700/60 text-zinc-300";
 };
 
 // ── Image Upload with file ref ────────────────────────────
@@ -193,7 +183,7 @@ export default function ArtistsPage() {
 
   useEffect(() => { load(); }, []);
 
-  const getImg = (a: Artist) => getImageUrl(a.photo_url || a.image || a.photo);
+  const getImg = (a: Artist) => getImageUrl(a.photo_url);
 
   const resetForm = () => {
     setForm({ name: "", genre: "", bio: "", email: "", phone: "", status: "ACTIVE" });
@@ -204,7 +194,14 @@ export default function ArtistsPage() {
   const openCreate = () => { resetForm(); setModal("create"); };
   const openEdit = (a: Artist) => {
     setSelected(a);
-    setForm({ name: a.name, genre: a.genre ?? "", bio: a.bio ?? "", email: a.email ?? "", phone: a.phone ?? "", status: a.status ?? "ACTIVE" });
+    setForm({
+      name: a.name,
+      genre: a.genre ?? "",
+      bio: a.bio ?? "",
+      email: a.email ?? "",
+      phone: a.phone ?? "",
+      status: a.status ?? "ACTIVE",
+    });
     setPhotoFile(null);
     setPhotoPreview(getImg(a));
     setModal("edit");
@@ -216,18 +213,19 @@ export default function ArtistsPage() {
     setSaving(true);
 
     const fd = new FormData();
-    fd.append("name", form.name);
-    if (form.genre) fd.append("genre", form.genre);
-    if (form.bio) fd.append("bio", form.bio);
-    if (form.email) fd.append("email", form.email);
-    if (form.phone) fd.append("phone", form.phone);
+    fd.append("name", form.name.trim());
+    fd.append("genre", form.genre ?? "");
+    fd.append("bio", form.bio ?? "");
+    fd.append("email", form.email ?? "");
+    fd.append("phone", form.phone ?? "");
     fd.append("status", form.status);
+
     if (photoFile) {
       fd.append("photo", photoFile);
-    } else if (modal === "edit" && selected) {
-      // preserve existing photo
-      const existingPath = selected.photo_url || selected.image || selected.photo || "";
-      if (existingPath) fd.append("photo_url", existingPath);
+    } else if (photoPreview) {
+      fd.append("photo_url", selected?.photo_url || "");
+    } else {
+      fd.append("photo_url", "");
     }
 
     if (modal === "create") await artistApi.create(fd);
@@ -248,13 +246,14 @@ export default function ArtistsPage() {
     load();
   };
 
-  // All unique genres from existing artists
+  // All unique genres merged with presets
   const existingGenres = Array.from(new Set(artists.map(a => a.genre).filter(Boolean))) as string[];
-  const genres = ["All Genres", ...existingGenres];
+  const allAvailableGenres = Array.from(new Set([...PRESET_GENRES, ...existingGenres])).sort();
+  const genres = ["All Genres", ...allAvailableGenres];
 
   let filtered = artists.filter(a => {
-    const matchSearch = a.name?.toLowerCase().includes(search.toLowerCase()) || (a.genre ?? "").toLowerCase().includes(search.toLowerCase());
-    const matchGenre = filterGenre === "All Genres" || a.genre === filterGenre;
+    const matchSearch = a.name?.toLowerCase().includes(search.toLowerCase()) || (a.bio ?? "").toLowerCase().includes(search.toLowerCase()) || (a.genre ?? "").toLowerCase().includes(search.toLowerCase());
+    const matchGenre = filterGenre === "All Genres" || a.genre?.toLowerCase() === filterGenre.toLowerCase();
     return matchSearch && matchGenre;
   });
   if (sortBy === "Name (A-Z)") filtered = [...filtered].sort((a, b) => a.name.localeCompare(b.name));
@@ -264,36 +263,86 @@ export default function ArtistsPage() {
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-zinc-850">
         <div>
-          <h1 className="text-white font-bold text-2xl">Artist Management</h1>
-          <p className="text-zinc-500 text-xs mt-1">Manage your roster, view analytics, and update profiles.</p>
+          <h1 className="text-white text-xl font-bold tracking-tight">Manajemen Artis & Musisi</h1>
+          <p className="text-zinc-400 text-xs mt-1">Kelola profil musisi panggung, genre musik, dan informasi kontak resmi.</p>
         </div>
-        <button onClick={openCreate} className="flex items-center gap-2 bg-red-700 hover:bg-red-600 text-white text-xs font-semibold px-4 py-2.5 rounded-lg transition-all">
-          <svg width="13" height="13" fill="none" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
-          Add New Artist
+        <button
+          onClick={openCreate}
+          className="flex items-center gap-1.5 bg-red-600 hover:bg-red-500 text-white text-xs font-semibold px-4 py-2 rounded-lg transition active:scale-[0.99] self-start sm:self-auto cursor-pointer"
+        >
+          <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+            <path d="M12 5v14M5 12h14" strokeLinecap="round" />
+          </svg>
+          <span>Tambah Artis Baru</span>
         </button>
+      </div>
+
+      {/* Summary Stat Strip */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-[#0b0c0f] border border-zinc-800/80 rounded-xl p-4 shadow-sm">
+          <p className="text-zinc-500 text-[10px] uppercase font-mono tracking-wider font-medium">Total Musisi</p>
+          <p className="text-white text-2xl font-bold mt-1 font-mono">{loading ? "..." : artists.length}</p>
+          <p className="text-zinc-500 text-xs mt-0.5">Musisi terdaftar dalam roster</p>
+        </div>
+        <div className="bg-[#0b0c0f] border border-zinc-800/80 rounded-xl p-4 shadow-sm">
+          <p className="text-zinc-500 text-[10px] uppercase font-mono tracking-wider font-medium">Musisi Aktif</p>
+          <p className="text-emerald-400 text-2xl font-bold mt-1 font-mono">
+            {loading ? "..." : artists.filter(a => (a.status ?? "ACTIVE").toUpperCase() === "ACTIVE").length}
+          </p>
+          <p className="text-zinc-500 text-xs mt-0.5">Siap masuk line-up panggung</p>
+        </div>
+        <div className="bg-[#0b0c0f] border border-zinc-800/80 rounded-xl p-4 shadow-sm">
+          <p className="text-zinc-500 text-[10px] uppercase font-mono tracking-wider font-medium">Ragam Genre</p>
+          <p className="text-white text-2xl font-bold mt-1 font-mono">{loading ? "..." : existingGenres.length || 8}</p>
+          <p className="text-zinc-500 text-xs mt-0.5">Kategori genre musik aktif</p>
+        </div>
       </div>
 
       {/* Toolbar */}
       <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-2 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 flex-1 min-w-48 max-w-64">
-          <svg width="13" height="13" fill="none" viewBox="0 0 24 24" className="text-zinc-500 shrink-0"><circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="1.5" /><path d="m21 21-4.35-4.35" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
-          <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Search artists..." className="bg-transparent text-white text-xs outline-none placeholder:text-zinc-600 w-full" />
+        <div className="flex items-center gap-2 bg-[#0b0c0f] border border-zinc-800/80 rounded-lg px-3 py-2 flex-1 min-w-48 max-w-72">
+          <svg width="14" height="14" fill="none" viewBox="0 0 24 24" className="text-zinc-500 shrink-0">
+            <circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="1.75" />
+            <path d="m21 21-4.35-4.35" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+          </svg>
+          <input
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            placeholder="Cari artis, genre, bio..."
+            className="bg-transparent text-white text-xs outline-none placeholder:text-zinc-600 w-full"
+          />
         </div>
-        <select value={filterGenre} onChange={e => { setFilterGenre(e.target.value); setPage(1); }} className="bg-zinc-800 border border-zinc-700 text-zinc-300 text-xs px-3 py-2 rounded-lg outline-none">
-          {genres.map(g => <option key={g}>{g}</option>)}
+        <select
+          value={filterGenre}
+          onChange={(e) => { setFilterGenre(e.target.value); setPage(1); }}
+          className="bg-[#0b0c0f] border border-zinc-800/80 text-zinc-300 text-xs px-3 py-2 rounded-lg outline-none"
+        >
+          {genres.map((g) => <option key={g} className="bg-zinc-900 text-white">{g}</option>)}
         </select>
-        <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="bg-zinc-800 border border-zinc-700 text-zinc-300 text-xs px-3 py-2 rounded-lg outline-none">
-          {["Name (A-Z)", "Name (Z-A)"].map(s => <option key={s}>{s}</option>)}
+        <select
+          value={sortBy}
+          onChange={(e) => setSortBy(e.target.value)}
+          className="bg-[#0b0c0f] border border-zinc-800/80 text-zinc-300 text-xs px-3 py-2 rounded-lg outline-none"
+        >
+          {["Name (A-Z)", "Name (Z-A)"].map((s) => <option key={s} className="bg-zinc-900 text-white">{s}</option>)}
         </select>
-        <div className="ml-auto flex items-center gap-1 bg-zinc-800 border border-zinc-700 rounded-lg p-1">
-          <button onClick={() => setViewMode("grid")} className={`p-1.5 rounded transition-all ${viewMode === "grid" ? "bg-zinc-600 text-white" : "text-zinc-500 hover:text-white"}`}>
+        <div className="ml-auto flex items-center gap-1 bg-[#0b0c0f] border border-zinc-800/80 rounded-lg p-1">
+          <button
+            onClick={() => setViewMode("grid")}
+            className={`p-1.5 rounded transition ${viewMode === "grid" ? "bg-zinc-800 text-white" : "text-zinc-500 hover:text-white"}`}
+            title="Grid View"
+          >
             <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.5" /><rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.5" /><rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.5" /><rect x="14" y="14" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.5" /></svg>
           </button>
-          <button onClick={() => setViewMode("list")} className={`p-1.5 rounded transition-all ${viewMode === "list" ? "bg-zinc-600 text-white" : "text-zinc-500 hover:text-white"}`}>
+          <button
+            onClick={() => setViewMode("list")}
+            className={`p-1.5 rounded transition ${viewMode === "list" ? "bg-zinc-800 text-white" : "text-zinc-500 hover:text-white"}`}
+            title="List View"
+          >
             <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
           </button>
         </div>
@@ -323,30 +372,42 @@ export default function ArtistsPage() {
           </button>
         </div>
       ) : (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
-          <div className="grid grid-cols-12 text-[10px] text-zinc-500 uppercase tracking-wider px-5 py-3 border-b border-zinc-800">
-            <span className="col-span-4">Artist</span><span className="col-span-2">Genre</span>
-            <span className="col-span-3">Email</span><span className="col-span-1">Status</span>
-            <span className="col-span-2 text-right">Actions</span>
+        <div className="bg-[#0b0c0f] border border-zinc-800/80 rounded-xl overflow-hidden shadow-sm">
+          <div className="grid grid-cols-12 text-[10px] font-mono text-zinc-500 uppercase tracking-wider px-5 py-3 border-b border-zinc-800/80 bg-zinc-950/40">
+            <span className="col-span-4 font-medium">Musisi</span>
+            <span className="col-span-2 font-medium">Genre Musik</span>
+            <span className="col-span-3 font-medium">Kontak Email</span>
+            <span className="col-span-1 font-medium">Status</span>
+            <span className="col-span-2 text-right font-medium">Aksi</span>
           </div>
           {paginated.length === 0 ? (
-            <div className="flex items-center justify-center py-16 text-zinc-500 text-sm">No artists found</div>
+            <div className="flex items-center justify-center py-16 text-zinc-500 text-sm">Tidak ada artis ditemukan</div>
           ) : paginated.map(a => (
-            <div key={a.id} className="grid grid-cols-12 items-center px-5 py-3 border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors last:border-0 group">
+            <div key={a.id} className="grid grid-cols-12 items-center px-5 py-3 border-b border-zinc-800/50 hover:bg-zinc-900/40 transition-colors last:border-0 group">
               <div className="col-span-4 flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg overflow-hidden shrink-0 bg-zinc-800 border border-zinc-700">
-                  {getImg(a) ? <img src={getImg(a)} alt={a.name} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-zinc-600 text-xs font-bold">{a.name[0]}</div>}
+                <div className="w-8 h-8 rounded-full overflow-hidden shrink-0 bg-zinc-800 border border-zinc-700">
+                  {getImg(a) ? <img src={getImg(a)} alt={a.name} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-red-500 text-xs font-bold">{a.name[0]}</div>}
                 </div>
-                <div><p className="text-white text-xs font-semibold">{a.name}</p><p className="text-zinc-600 text-[10px] line-clamp-1">{a.bio}</p></div>
+                <div>
+                  <p className="text-white text-xs font-semibold leading-tight">{a.name}</p>
+                  <p className="text-zinc-500 text-[10px] line-clamp-1">{a.bio || "Musisi konser"}</p>
+                </div>
               </div>
               <span className="col-span-2 text-zinc-400 text-xs">{a.genre ?? "—"}</span>
-              <span className="col-span-3 text-zinc-400 text-xs truncate">{a.email ?? "—"}</span>
+              <span className="col-span-3 text-zinc-400 text-xs font-mono truncate">{a.email ?? "—"}</span>
               <span className="col-span-1">
-                <span className={`text-[9px] font-bold px-2 py-0.5 rounded border ${(a.status ?? "ACTIVE").toUpperCase() === "ACTIVE" ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" : "bg-zinc-500/15 text-zinc-400 border-zinc-500/30"}`}>{a.status ?? "ACTIVE"}</span>
+                <span className={`inline-flex items-center gap-1 text-[9px] font-mono font-medium px-2 py-0.5 rounded border ${(a.status ?? "ACTIVE").toUpperCase() === "ACTIVE" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-zinc-800 text-zinc-400 border-zinc-700"}`}>
+                  <span className={`w-1 h-1 rounded-full ${(a.status ?? "ACTIVE").toUpperCase() === "ACTIVE" ? "bg-emerald-400" : "bg-zinc-500"}`} />
+                  {(a.status ?? "ACTIVE").toUpperCase() === "ACTIVE" ? "Aktif" : "Nonaktif"}
+                </span>
               </span>
-              <div className="col-span-2 flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button onClick={() => openEdit(a)} className="text-zinc-500 hover:text-white p-1.5 rounded hover:bg-zinc-700 transition-colors"><svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg></button>
-                <button onClick={() => openDelete(a)} className="text-zinc-500 hover:text-red-400 p-1.5 rounded hover:bg-red-900/20 transition-colors"><svg width="12" height="12" fill="none" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg></button>
+              <div className="col-span-2 flex justify-end gap-1">
+                <button onClick={() => openEdit(a)} className="text-zinc-400 hover:text-white p-1 rounded hover:bg-zinc-800 transition cursor-pointer" title="Edit">
+                  <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.75"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" strokeLinecap="round" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" strokeLinecap="round" /></svg>
+                </button>
+                <button onClick={() => openDelete(a)} className="text-zinc-500 hover:text-red-400 p-1 rounded hover:bg-red-950/20 transition cursor-pointer" title="Hapus">
+                  <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.75"><polyline points="3 6 5 6 21 6" strokeLinecap="round" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" strokeLinecap="round" /><path d="M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" strokeLinecap="round" /></svg>
+                </button>
               </div>
             </div>
           ))}
@@ -413,40 +474,43 @@ export default function ArtistsPage() {
 
 function ArtistCard({ artist, getImg, genreColor, onEdit, onDelete }: {
   artist: Artist; getImg: (a: Artist) => string;
-  genreColor: (g?: string) => string; onEdit: () => void; onDelete: () => void;
+  genreColor: (g?: string) => string;
+  onEdit: () => void; onDelete: () => void;
 }) {
   const img = getImg(artist);
   return (
-    <div className="relative bg-zinc-900 rounded-xl overflow-hidden border border-zinc-800 hover:border-zinc-600 transition-all duration-200 group cursor-default flex flex-col" style={{minHeight:280}}>
-      <div className="relative flex-1" style={{minHeight:180}}>
-        {img ? <img src={img} alt={artist.name} className="w-full h-full object-cover" style={{minHeight:180}} /> : (
-          <div className="w-full flex items-center justify-center bg-zinc-800" style={{minHeight:180}}>
-            <div className="flex flex-col items-center gap-2 text-zinc-600">
-              <svg width="32" height="32" fill="none" viewBox="0 0 24 24"><circle cx="9" cy="7" r="4" stroke="currentColor" strokeWidth="1.5" /><path d="M2 21v-1a7 7 0 0 1 7-7h0a7 7 0 0 1 7 7v1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
-              <span className="text-xs">No photo</span>
+    <div className="relative bg-[#0b0c0f] rounded-xl overflow-hidden border border-zinc-800/80 hover:border-zinc-700/80 transition group cursor-default flex flex-col shadow-sm" style={{minHeight:260}}>
+      <div className="relative flex-1" style={{minHeight:170}}>
+        {img ? <img src={img} alt={artist.name} className="w-full h-full object-cover group-hover:scale-102 transition duration-300" style={{minHeight:170}} /> : (
+          <div className="w-full flex items-center justify-center bg-zinc-950" style={{minHeight:170}}>
+            <div className="flex flex-col items-center gap-1.5 text-zinc-600">
+              <svg width="28" height="28" fill="none" viewBox="0 0 24 24"><circle cx="9" cy="7" r="4" stroke="currentColor" strokeWidth="1.5" /><path d="M2 21v-1a7 7 0 0 1 7-7h0a7 7 0 0 1 7 7v1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+              <span className="text-[11px]">Tanpa Foto</span>
             </div>
           </div>
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent" />
-        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-          <button onClick={onEdit} className="bg-black/60 hover:bg-zinc-800 text-white p-1.5 rounded-lg transition-colors">
+        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
+        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition flex gap-1">
+          <button onClick={onEdit} className="bg-black/70 hover:bg-zinc-800 text-white p-1.5 rounded-md transition cursor-pointer">
             <svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
           </button>
-          <button onClick={onDelete} className="bg-black/60 hover:bg-red-900/60 text-white hover:text-red-400 p-1.5 rounded-lg transition-colors">
+          <button onClick={onDelete} className="bg-black/70 hover:bg-red-900/60 text-white hover:text-red-400 p-1.5 rounded-md transition cursor-pointer">
             <svg width="12" height="12" fill="none" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
           </button>
         </div>
-        <div className="absolute bottom-0 left-0 right-0 p-3">
-          <p className="text-white font-bold text-base leading-tight">{artist.name}</p>
-          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-            {artist.genre && <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${genreColor(artist.genre)} text-white`}>{artist.genre}</span>}
-            <span className="text-zinc-400 text-[10px]">ID: ART-{String(artist.id).padStart(3,"0")}</span>
+        <div className="absolute bottom-0 inset-x-0 p-3">
+          <p className="text-white font-bold text-sm leading-tight truncate">{artist.name}</p>
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
+            {artist.genre && <span className={`text-[9px] font-medium uppercase tracking-wider px-2 py-0.5 rounded ${genreColor(artist.genre)} text-white`}>{artist.genre}</span>}
           </div>
         </div>
       </div>
-      <div className="flex items-center justify-between px-3 py-2.5 border-t border-zinc-800 bg-zinc-900">
-        <span className="text-zinc-500 text-[10px]">{artist.status ?? "ACTIVE"}</span>
-        <button onClick={onEdit} className="text-red-400 hover:text-red-300 text-[10px] font-semibold uppercase tracking-wider transition-colors">Manage</button>
+      <div className="flex items-center justify-between px-3 py-2 border-t border-zinc-800/80 bg-[#0b0c0f]">
+        <span className={`inline-flex items-center gap-1 text-[9px] font-mono font-medium px-2 py-0.5 rounded border ${(artist.status ?? "ACTIVE").toUpperCase() === "ACTIVE" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-zinc-800 text-zinc-400 border-zinc-700"}`}>
+          <span className={`w-1 h-1 rounded-full ${(artist.status ?? "ACTIVE").toUpperCase() === "ACTIVE" ? "bg-emerald-400" : "bg-zinc-500"}`} />
+          {(artist.status ?? "ACTIVE").toUpperCase() === "ACTIVE" ? "Aktif" : "Nonaktif"}
+        </span>
+        <button onClick={onEdit} className="text-zinc-400 hover:text-white text-xs font-medium transition cursor-pointer">Edit</button>
       </div>
     </div>
   );

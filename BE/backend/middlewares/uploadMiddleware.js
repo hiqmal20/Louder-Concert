@@ -11,15 +11,27 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    cb(null, `${unique}${path.extname(file.originalname)}`);
+    const ext = path.extname(file.originalname || "") || ".jpg";
+    cb(null, `${unique}${ext}`);
   },
 });
 
 const fileFilter = (req, file, cb) => {
-  const allowed = /jpeg|jpg|png|webp/;
-  const ext  = allowed.test(path.extname(file.originalname).toLowerCase());
-  const mime = allowed.test(file.mimetype);
-  if (ext && mime) return cb(null, true);
+  const allowed = /jpeg|jpg|png|webp|gif|bmp|heic/i;
+  const ext = path.extname(file.originalname || "").toLowerCase();
+  const isAllowedExt = allowed.test(ext);
+  const isAllowedMime =
+    allowed.test(file.mimetype || "") ||
+    (file.mimetype && file.mimetype.startsWith("image/"));
+
+  if (
+    isAllowedExt ||
+    isAllowedMime ||
+    !file.mimetype ||
+    file.mimetype === "application/octet-stream"
+  ) {
+    return cb(null, true);
+  }
   cb(new Error("Hanya file gambar yang diizinkan (jpeg, jpg, png, webp)"));
 };
 

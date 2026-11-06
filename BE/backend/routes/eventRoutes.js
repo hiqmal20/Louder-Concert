@@ -6,11 +6,16 @@ import upload from "../middlewares/uploadMiddleware.js";
 
 const router = Router();
 
+const eventUpload = upload.fields([
+  { name: "poster", maxCount: 1 },
+  { name: "lineup_poster", maxCount: 1 },
+]);
+
 router.get("/",                  getAll);
 router.get("/:id",               getOne);
 router.get("/:id/sales-summary", authenticate, authorizeAdmin, getSalesSummary);
-router.post("/",                 authenticate, authorizeAdmin, upload.single("poster"), create);
-router.put("/:id",               authenticate, authorizeAdmin, upload.single("poster"), update);
+router.post("/",                 authenticate, authorizeAdmin, eventUpload, create);
+router.put("/:id",               authenticate, authorizeAdmin, eventUpload, update);
 router.delete("/:id",            authenticate, authorizeAdmin, remove);
 
 export default router;

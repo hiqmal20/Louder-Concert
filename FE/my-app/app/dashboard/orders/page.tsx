@@ -1,68 +1,67 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { orderApi, paymentApi } from "@/lib/api";
+import { orderApi, paymentApi, getImageUrl } from "@/lib/api";
 import { Modal } from "@/components/ui/modal";
-import { FormField, SubmitButton } from "@/components/ui/input";
 
 interface Order {
   id: number;
+  order_code?: string;
   status?: string;
+  total_amount?: number;
   totalPrice?: number;
+  promo_code?: string;
+  seat_numbers?: string;
+  discount_amount?: number;
+  original_amount?: number;
+  ordered_at?: string;
+  created_at?: string;
   createdAt?: string;
-  userId?: number;
-  eventId?: number;
-  user?: { id: number; name: string; email: string };
-  event?: { id: number; name: string };
-  payment?: { id: number; status: string; method?: string; paidAt?: string };
-  tickets?: { id: number; category?: { name: string } }[];
+  user_id?: number;
+  customer_name?: string;
+  event_name?: string;
+  items?: { id: number; category_name: string; quantity: number; price: number; subtotal: number }[];
+  payments?: { id: number; status: string; method: string; amount: number; proof_url?: string }[];
 }
 
 type PaymentStatus = "PAID" | "AWAITING_VERIFICATION" | "FAILED" | "PENDING" | string;
 
 const PAGE_SIZE = 10;
 
-// ── Payment Status Badge ──────────────────────────────────
 function PaymentBadge({ status }: { status: PaymentStatus }) {
   const s = (status ?? "").toUpperCase().replace(/\s+/g, "_");
-  if (s === "PAID") return (
-    <span className="inline-flex items-center gap-1.5 bg-zinc-800 border border-zinc-700 text-zinc-300 text-[10px] font-medium px-2.5 py-1 rounded-full">
-      <svg width="10" height="10" fill="none" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /><path d="M22 4 12 14.01l-3-3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-      Paid
+  if (s === "PAID" || s === "COMPLETED" || s === "VERIFIED") return (
+    <span className="inline-flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-mono font-medium px-2 py-0.5 rounded">
+      <span className="w-1 h-1 rounded-full bg-emerald-400" />
+      Lunas
     </span>
   );
   if (s === "AWAITING_VERIFICATION" || s === "PENDING") return (
-    <span className="inline-flex items-center gap-1.5 bg-zinc-800 border border-zinc-700 text-zinc-400 text-[10px] font-medium px-2.5 py-1 rounded-full">
-      <svg width="10" height="10" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" /><path d="M12 6v6l4 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
-      Awaiting Verification
+    <span className="inline-flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[10px] font-mono font-medium px-2 py-0.5 rounded">
+      <span className="w-1 h-1 rounded-full bg-amber-400" />
+      Menunggu
     </span>
   );
-  if (s === "FAILED" || s === "CANCELLED") return (
-    <span className="inline-flex items-center gap-1.5 bg-red-900/20 border border-red-700/40 text-red-400 text-[10px] font-medium px-2.5 py-1 rounded-full">
-      <svg width="10" height="10" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" /><path d="M15 9l-6 6M9 9l6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
-      {s === "CANCELLED" ? "Cancelled" : "Failed"}
-    </span>
-  );
-  if (s === "COMPLETED") return (
-    <span className="inline-flex items-center gap-1.5 bg-emerald-900/20 border border-emerald-700/40 text-emerald-400 text-[10px] font-medium px-2.5 py-1 rounded-full">
-      <svg width="10" height="10" fill="none" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /><path d="M22 4 12 14.01l-3-3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-      Completed
+  if (s === "FAILED" || s === "CANCELLED" || s === "REJECTED") return (
+    <span className="inline-flex items-center gap-1.5 bg-red-500/10 border border-red-500/20 text-red-400 text-[10px] font-mono font-medium px-2 py-0.5 rounded">
+      <span className="w-1 h-1 rounded-full bg-red-400" />
+      {s === "CANCELLED" ? "Batal" : "Ditolak"}
     </span>
   );
   return (
-    <span className="inline-flex items-center gap-1.5 bg-zinc-800 border border-zinc-700 text-zinc-400 text-[10px] font-medium px-2.5 py-1 rounded-full">
+    <span className="inline-flex items-center gap-1.5 bg-zinc-800 border border-zinc-700 text-zinc-400 text-[10px] font-mono font-medium px-2 py-0.5 rounded">
+      <span className="w-1 h-1 rounded-full bg-zinc-500" />
       {status ?? "Unknown"}
     </span>
   );
 }
 
-// ── Stat Card ─────────────────────────────────────────────
-function StatCard({ label, value, sub, color = "text-white" }: { label: string; value: string; sub?: string; color?: string }) {
+function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-5 py-4">
-      <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-semibold">{label}</p>
-      <p className={`text-2xl font-bold mt-1 ${color}`}>{value}</p>
-      {sub && <p className="text-zinc-500 text-[10px] mt-1">{sub}</p>}
+    <div className="bg-[#0b0c0f] border border-zinc-800/80 rounded-xl p-5 shadow-sm">
+      <p className="text-zinc-500 text-[10px] uppercase tracking-wider font-mono font-medium">{label}</p>
+      <p className="text-white text-2xl font-bold mt-2 font-mono tracking-tight">{value}</p>
+      {sub && <p className="text-zinc-500 text-xs mt-1 font-sans">{sub}</p>}
     </div>
   );
 }
@@ -71,9 +70,9 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [modal, setModal] = useState<"detail" | "verify" | "delete" | null>(null);
+  const [modal, setModal] = useState<"detail" | null>(null);
   const [selected, setSelected] = useState<Order | null>(null);
-  const [newStatus, setNewStatus] = useState("COMPLETED");
+  const [selectedDetail, setSelectedDetail] = useState<Order | null>(null);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("ALL");
@@ -87,57 +86,42 @@ export default function OrdersPage() {
     setRefreshing(false);
   };
 
-  useEffect(() => { load(); }, []);
-
-  const getPaymentStatus = (o: Order | null): PaymentStatus => {
-    if (!o) return "PENDING";
-    if (o.payment?.status) return o.payment.status;
-    if (o.status) return o.status;
-    return "PENDING";
-  };
-
-  const needsVerification = (o: Order | null) => {
-    if (!o) return false;
-    const s = getPaymentStatus(o).toUpperCase().replace(/\s+/g, "_");
-    return s === "AWAITING_VERIFICATION" || s === "PENDING";
-  };
-
-  const handleVerify = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selected) return;
-    setSaving(true);
-    await orderApi.update(selected.id, { status: newStatus });
-    if (selected.payment?.id) {
-      await paymentApi.update(selected.payment.id, { status: newStatus });
-    }
-    setSaving(false);
-    setModal(null);
+  useEffect(() => {
     load();
+  }, []);
+
+  const openDetail = async (o: Order) => {
+    setSelected(o);
+    setModal("detail");
+    const detailRes = await orderApi.getById(o.id);
+    if (detailRes.ok) setSelectedDetail(detailRes.data);
   };
 
-  const handleDelete = async () => {
-    if (!selected) return;
+  const handleVerifyPayment = async (paymentId: number, status: "verified" | "rejected") => {
     setSaving(true);
-    await orderApi.remove(selected.id);
+    await paymentApi.update(paymentId, { status });
     setSaving(false);
     setModal(null);
     load();
   };
 
   // Filter + search
-  const filtered = orders.filter(o => {
-    const ps = getPaymentStatus(o).toUpperCase().replace(/\s+/g, "_");
+  const filtered = orders.filter((o) => {
+    const s = (o.status ?? "").toLowerCase();
     const matchStatus =
       filterStatus === "ALL" ||
-      (filterStatus === "AWAITING" && (ps === "AWAITING_VERIFICATION" || ps === "PENDING")) ||
-      (filterStatus === "PAID" && ps === "PAID") ||
-      (filterStatus === "COMPLETED" && ps === "COMPLETED") ||
-      (filterStatus === "FAILED" && (ps === "FAILED" || ps === "CANCELLED"));
+      (filterStatus === "PENDING" && (s === "pending" || s === "awaiting_verification")) ||
+      (filterStatus === "VERIFIED" && s === "verified") ||
+      (filterStatus === "COMPLETED" && s === "completed") ||
+      (filterStatus === "CANCELLED" && (s === "cancelled" || s === "failed" || s === "rejected"));
+
+    const query = search.toLowerCase();
     const matchSearch =
-      String(o.id).includes(search) ||
-      o.user?.name?.toLowerCase().includes(search.toLowerCase()) ||
-      o.user?.email?.toLowerCase().includes(search.toLowerCase()) ||
-      o.event?.name?.toLowerCase().includes(search.toLowerCase());
+      (o.order_code ?? "").toLowerCase().includes(query) ||
+      (o.customer_name ?? "").toLowerCase().includes(query) ||
+      (o.event_name ?? "").toLowerCase().includes(query) ||
+      String(o.id).includes(query);
+
     return matchStatus && matchSearch;
   });
 
@@ -145,198 +129,190 @@ export default function OrdersPage() {
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   // Stats
-  const totalRevenue = orders.reduce((s, o) => s + (o.totalPrice ?? 0), 0);
-  const pendingCount = orders.filter(o => needsVerification(o)).length;
-  const paidCount = orders.filter(o => {
-    const s = getPaymentStatus(o).toUpperCase();
-    return s === "PAID" || s === "COMPLETED";
+  const totalRevenue = orders
+    .filter((o) => (o.status ?? "").toLowerCase() === "verified" || (o.status ?? "").toLowerCase() === "completed")
+    .reduce((s, o) => s + Number(o.total_amount ?? o.totalPrice ?? 0), 0);
+  const pendingCount = orders.filter((o) => (o.status ?? "").toLowerCase() === "pending" || (o.status ?? "").toLowerCase() === "awaiting_verification").length;
+  const verifiedCount = orders.filter((o) => {
+    const s = (o.status ?? "").toLowerCase();
+    return s === "verified" || s === "completed";
   }).length;
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-zinc-850">
         <div>
-          <h1 className="text-white font-bold text-2xl">Order Management</h1>
-          <p className="text-zinc-500 text-xs mt-1">Review recent transactions and verify pending payments.</p>
+          <h1 className="text-white text-xl font-bold tracking-tight">Pesanan Tiket & Verifikasi</h1>
+          <p className="text-zinc-400 text-xs mt-1">
+            Pantau dan verifikasi pembayaran tiket konser pelanggan mobile secara real-time.
+          </p>
         </div>
         <button
           onClick={() => load(true)}
           disabled={refreshing}
-          className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 text-xs font-medium px-3 py-2 rounded-lg transition-all disabled:opacity-50"
+          className="flex items-center gap-1.5 bg-[#0b0c0f] hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white text-xs font-medium px-3.5 py-2 rounded-lg transition disabled:opacity-50 self-start sm:self-auto cursor-pointer"
         >
-          <svg width="13" height="13" fill="none" viewBox="0 0 24 24" className={refreshing ? "animate-spin" : ""}>
-            <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 0 0 4.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 0 1-15.357-2m15.357 2H15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          <svg width="14" height="14" fill="none" viewBox="0 0 24 24" className={refreshing ? "animate-spin text-red-500" : ""}>
+            <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 0 0 4.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 0 1-15.357-2m15.357 2H15" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
           </svg>
-          Refresh Data
+          <span>Segarkan Data</span>
         </button>
       </div>
 
       {/* Stat Cards */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-        <StatCard label="Total Orders" value={loading ? "..." : orders.length.toLocaleString()} sub="all time" />
+        <StatCard label="Total Transaksi" value={loading ? "..." : orders.length.toLocaleString("id-ID")} sub="Seluruh pesanan tercatat" />
         <StatCard
-          label="Awaiting Verification"
+          label="Menunggu Bayar"
           value={loading ? "..." : String(pendingCount)}
-          sub="needs action"
-          color={pendingCount > 0 ? "text-amber-400" : "text-white"}
+          sub="Perlu konfirmasi / upload"
         />
         <StatCard
-          label="Paid / Completed"
-          value={loading ? "..." : String(paidCount)}
-          sub="confirmed"
-          color="text-emerald-400"
+          label="Tiket Lunas & Aktif"
+          value={loading ? "..." : String(verifiedCount)}
+          sub="E-Ticket QR aktif"
         />
         <StatCard
-          label="Total Revenue"
-          value={loading ? "..." : `$${totalRevenue.toLocaleString("en", { minimumFractionDigits: 2 })}`}
-          sub="from all orders"
-          color="text-red-400"
+          label="Total Omset Penjualan"
+          value={loading ? "..." : `Rp ${totalRevenue.toLocaleString("id-ID")}`}
+          sub="Dari transaksi terverifikasi"
         />
       </div>
 
-      {/* Filters */}
-      <div className="flex items-center gap-3 flex-wrap">
+      {/* Filters and Search */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        {/* Status filter pills */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+          {[
+            { key: "ALL", label: "Semua" },
+            { key: "PENDING", label: "Menunggu" },
+            { key: "VERIFIED", label: "Terverifikasi" },
+            { key: "COMPLETED", label: "Selesai" },
+            { key: "CANCELLED", label: "Dibatalkan" },
+          ].map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => { setFilterStatus(key); setPage(1); }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition shrink-0 cursor-pointer ${
+                filterStatus === key
+                  ? "bg-zinc-800 text-white border border-zinc-700"
+                  : "bg-transparent text-zinc-400 hover:text-white hover:bg-zinc-900 border border-transparent"
+              }`}
+            >
+              {label}
+              {key === "PENDING" && pendingCount > 0 && (
+                <span className="ml-1.5 bg-red-600/20 border border-red-500/30 text-red-400 text-[10px] font-mono px-1.5 py-0.2 rounded-full">
+                  {pendingCount}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
         {/* Search */}
-        <div className="flex items-center gap-2 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 flex-1 min-w-48 max-w-72">
-          <svg width="13" height="13" fill="none" viewBox="0 0 24 24" className="text-zinc-500 shrink-0">
-            <circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="1.5" />
-            <path d="m21 21-4.35-4.35" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        <div className="flex items-center gap-2 bg-[#0b0c0f] border border-zinc-800/80 rounded-lg px-3 py-2 w-full sm:w-72">
+          <svg width="14" height="14" fill="none" viewBox="0 0 24 24" className="text-zinc-500 shrink-0">
+            <circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="1.75" />
+            <path d="m21 21-4.35-4.35" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
           </svg>
           <input
             value={search}
-            onChange={e => { setSearch(e.target.value); setPage(1); }}
-            placeholder="Search orders..."
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            placeholder="Cari kode order, customer..."
             className="bg-transparent text-white text-xs outline-none placeholder:text-zinc-600 w-full"
           />
         </div>
-
-        {/* Status filter */}
-        {[
-          { key: "ALL", label: "All" },
-          { key: "AWAITING", label: "Awaiting" },
-          { key: "PAID", label: "Paid" },
-          { key: "COMPLETED", label: "Completed" },
-          { key: "FAILED", label: "Failed" },
-        ].map(({ key, label }) => (
-          <button
-            key={key}
-            onClick={() => { setFilterStatus(key); setPage(1); }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${filterStatus === key ? "bg-red-700 text-white" : "bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white"}`}
-          >
-            {label}
-            {key === "AWAITING" && pendingCount > 0 && (
-              <span className="ml-1.5 bg-amber-500 text-black text-[9px] font-bold px-1.5 py-0.5 rounded-full">{pendingCount}</span>
-            )}
-          </button>
-        ))}
       </div>
 
       {/* Table */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+      <div className="bg-[#0b0c0f] border border-zinc-800/80 rounded-xl overflow-hidden shadow-sm">
         {/* Header */}
-        <div className="grid grid-cols-12 text-[10px] text-zinc-500 uppercase tracking-wider px-5 py-3 border-b border-zinc-800">
-          <span className="col-span-2">Order ID</span>
-          <span className="col-span-2">Customer Name</span>
-          <span className="col-span-3">Event</span>
-          <span className="col-span-1 text-right">Total Paid</span>
-          <span className="col-span-2 text-center">Payment Status</span>
-          <span className="col-span-2 text-right">Action</span>
+        <div className="grid grid-cols-12 text-[10px] font-mono text-zinc-500 uppercase tracking-wider px-5 py-3 border-b border-zinc-800/80 bg-zinc-950/40">
+          <span className="col-span-2 font-medium">Kode Order</span>
+          <span className="col-span-3 font-medium">Pelanggan</span>
+          <span className="col-span-3 font-medium">Konser</span>
+          <span className="col-span-2 text-right font-medium">Total Nominal</span>
+          <span className="col-span-1 text-center font-medium">Status</span>
+          <span className="col-span-1 text-right font-medium">Aksi</span>
         </div>
 
         {loading ? (
           <div className="flex items-center justify-center py-20">
-            <div className="flex flex-col items-center gap-3">
-              <svg className="animate-spin h-6 w-6 text-red-500" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-              </svg>
-              <span className="text-zinc-500 text-xs">Loading orders...</span>
-            </div>
+            <div className="w-5 h-5 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
           </div>
         ) : paginated.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 gap-2">
-            <svg width="32" height="32" fill="none" viewBox="0 0 24 24" className="text-zinc-700">
-              <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              <rect x="9" y="3" width="6" height="4" rx="1" stroke="currentColor" strokeWidth="1.5" />
-            </svg>
-            <p className="text-zinc-500 text-sm">No orders found</p>
-            <p className="text-zinc-600 text-xs">Try adjusting your search or filter</p>
+            <p className="text-zinc-400 text-sm font-medium">Tidak ada transaksi ditemukan</p>
+            <p className="text-zinc-600 text-xs">Sesuaikan filter atau pencarian Anda</p>
           </div>
         ) : (
           paginated.map((o, i) => {
-            const ps = getPaymentStatus(o);
-            const verify = needsVerification(o);
+            const rawAmount = Number(o.total_amount ?? o.totalPrice ?? 0);
+            const dateStr = o.ordered_at ?? o.created_at ?? o.createdAt;
 
             return (
               <div
                 key={o.id}
-                className={`grid grid-cols-12 items-center px-5 py-4 hover:bg-zinc-800/30 transition-colors ${i < paginated.length - 1 ? "border-b border-zinc-800/50" : ""}`}
+                className={`grid grid-cols-12 items-center px-5 py-3.5 hover:bg-zinc-900/40 transition-colors ${
+                  i < paginated.length - 1 ? "border-b border-zinc-800/50" : ""
+                }`}
               >
                 {/* Order ID */}
                 <div className="col-span-2">
                   <button
-                    onClick={() => { setSelected(o); setModal("detail"); }}
-                    className="text-red-400 hover:text-red-300 text-xs font-bold tracking-wide transition-colors"
+                    onClick={() => openDetail(o)}
+                    className="text-red-400 hover:text-red-300 text-xs font-mono font-medium tracking-wide transition text-left cursor-pointer"
                   >
-                    #ORD-{String(o.id).padStart(4, "0")}
+                    {o.order_code ?? `#ORD-${String(o.id).padStart(4, "0")}`}
                   </button>
-                  {o.createdAt && (
-                    <p className="text-zinc-600 text-[10px] mt-0.5">
-                      {new Date(o.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+                  {dateStr && (
+                    <p className="text-zinc-500 text-[10px] mt-0.5">
+                      {new Date(dateStr).toLocaleDateString("id-ID", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                      })}
                     </p>
                   )}
                 </div>
 
                 {/* Customer */}
-                <div className="col-span-2">
-                  <p className="text-white text-xs font-medium">{o.user?.name ?? `User #${o.userId}`}</p>
-                  <p className="text-zinc-500 text-[10px] mt-0.5 truncate">{o.user?.email}</p>
+                <div className="col-span-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-zinc-800 border border-zinc-700/80 flex items-center justify-center text-[10px] font-bold text-zinc-300 shrink-0">
+                      {(o.customer_name ?? "U").slice(0, 1)}
+                    </div>
+                    <span className="text-white text-xs font-medium truncate">
+                      {o.customer_name ?? `User #${o.user_id}`}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Event */}
                 <div className="col-span-3">
-                  <p className="text-zinc-300 text-xs">{o.event?.name ?? `Event #${o.eventId}`}</p>
+                  <p className="text-zinc-300 text-xs truncate max-w-[200px]">{o.event_name ?? "—"}</p>
                 </div>
 
                 {/* Total */}
-                <div className="col-span-1 text-right">
-                  <p className="text-white text-xs font-semibold">
-                    ${(o.totalPrice ?? 0).toLocaleString("en", { minimumFractionDigits: 2 })}
+                <div className="col-span-2 text-right">
+                  <p className="text-white text-xs font-mono font-medium">
+                    Rp {rawAmount.toLocaleString("id-ID")}
                   </p>
                 </div>
 
                 {/* Status */}
-                <div className="col-span-2 flex justify-center">
-                  <PaymentBadge status={ps} />
+                <div className="col-span-1 flex justify-center">
+                  <PaymentBadge status={o.status ?? "pending"} />
                 </div>
 
                 {/* Action */}
-                <div className="col-span-2 flex items-center justify-end gap-2">
-                  {verify ? (
-                    <button
-                      onClick={() => { setSelected(o); setNewStatus("COMPLETED"); setModal("verify"); }}
-                      className="bg-red-700 hover:bg-red-600 text-white text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-lg transition-all"
-                    >
-                      Verify Payment
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => { setSelected(o); setModal("detail"); }}
-                      className="text-red-400 hover:text-red-300 text-xs font-medium transition-colors"
-                    >
-                      View Details
-                    </button>
-                  )}
+                <div className="col-span-1 flex items-center justify-end">
                   <button
-                    onClick={() => { setSelected(o); setModal("delete"); }}
-                    className="text-zinc-600 hover:text-red-400 transition-colors p-1 rounded hover:bg-red-900/20"
-                    title="Delete"
+                    onClick={() => openDetail(o)}
+                    className="text-zinc-400 hover:text-white text-xs font-medium px-2 py-1 rounded hover:bg-zinc-800 transition cursor-pointer"
                   >
-                    <svg width="12" height="12" fill="none" viewBox="0 0 24 24">
-                      <polyline points="3 6 5 6 21 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                    </svg>
+                    Detail
                   </button>
                 </div>
               </div>
@@ -346,147 +322,197 @@ export default function OrdersPage() {
 
         {/* Pagination */}
         {!loading && filtered.length > 0 && (
-          <div className="flex items-center justify-between px-5 py-3.5 border-t border-zinc-800 bg-zinc-900/50">
+          <div className="flex items-center justify-between px-5 py-3 border-t border-zinc-800/80 bg-zinc-950/40">
             <p className="text-zinc-500 text-xs">
-              Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length} orders
+              Menampilkan {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} dari {filtered.length} pesanan
             </p>
-            <div className="flex items-center gap-1">
-              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-                className="px-3 py-1 text-xs rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all">
-                Previous
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="px-2.5 py-1 text-xs rounded-md bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                Sebelumnya
               </button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1)
-                .filter(p => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
-                .reduce<(number | "...")[]>((acc, p, i, arr) => {
-                  if (i > 0 && p - (arr[i - 1] as number) > 1) acc.push("...");
-                  acc.push(p); return acc;
-                }, [])
-                .map((p, i) => p === "..." ? (
-                  <span key={`e${i}`} className="px-2 text-zinc-600 text-xs">…</span>
-                ) : (
-                  <button key={p} onClick={() => setPage(p as number)}
-                    className={`w-7 h-7 text-xs rounded-lg transition-all ${page === p ? "bg-red-700 text-white font-semibold" : "bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-700"}`}>
-                    {p}
-                  </button>
-                ))}
-              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-                className="px-3 py-1 text-xs rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all">
-                Next
+              <span className="text-zinc-400 text-xs px-2 font-mono">
+                {page} / {totalPages}
+              </span>
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                className="px-2.5 py-1 text-xs rounded-md bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                Berikutnya
               </button>
             </div>
           </div>
         )}
       </div>
 
-      {/* ── Detail Modal ───────────────────────────── */}
-      <Modal open={modal === "detail"} onClose={() => setModal(null)} title={`Order #ORD-${String(selected?.id ?? "").padStart(4, "0")}`}>
+      {/* Detail Modal */}
+      <Modal
+        open={modal === "detail"}
+        onClose={() => { setModal(null); setSelectedDetail(null); }}
+        title={`Rincian Pesanan ${selected?.order_code ?? `#ORD-${selected?.id}`}`}
+      >
         {selected && (
           <div className="flex flex-col gap-4">
             {/* Info grid */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2.5">
               {[
-                { label: "Customer", value: selected.user?.name ?? `User #${selected.userId}` },
-                { label: "Email", value: selected.user?.email ?? "—" },
-                { label: "Event", value: selected.event?.name ?? `Event #${selected.eventId}` },
-                { label: "Date", value: selected.createdAt ? new Date(selected.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" }) : "—" },
-                { label: "Total Paid", value: `$${(selected.totalPrice ?? 0).toLocaleString("en", { minimumFractionDigits: 2 })}` },
-                { label: "Payment Method", value: selected.payment?.method ?? "—" },
+                { label: "Pelanggan", value: selectedDetail?.customer_name ?? selected.customer_name ?? `User #${selected.user_id}` },
+                { label: "Konser", value: selectedDetail?.event_name ?? selected.event_name ?? "—" },
+                {
+                  label: "Tanggal Order",
+                  value: selected.ordered_at
+                    ? new Date(selected.ordered_at).toLocaleDateString("id-ID", {
+                        day: "2-digit",
+                        month: "long",
+                        year: "numeric",
+                      })
+                    : "—",
+                },
+                {
+                  label: "Total Bayar",
+                  value: `Rp ${Number(selected.total_amount ?? 0).toLocaleString("id-ID")}`,
+                },
+                {
+                  label: "Nomor Kursi",
+                  value: selectedDetail?.seat_numbers || selected.seat_numbers || "General / Bebas",
+                },
+                {
+                  label: "Voucher Diskon",
+                  value: selectedDetail?.promo_code || selected.promo_code
+                    ? `${selectedDetail?.promo_code || selected.promo_code} (-Rp ${Number(
+                        selectedDetail?.discount_amount || selected.discount_amount || 0
+                      ).toLocaleString("id-ID")})`
+                    : "Tanpa Promo",
+                },
               ].map(({ label, value }) => (
-                <div key={label} className="bg-zinc-800 rounded-lg px-3 py-2.5">
-                  <p className="text-zinc-500 text-[10px] uppercase tracking-wider">{label}</p>
-                  <p className="text-white text-xs font-medium mt-0.5 break-all">{value}</p>
+                <div key={label} className="bg-zinc-950/60 border border-zinc-800/80 rounded-lg p-2.5">
+                  <p className="text-zinc-500 text-[10px] uppercase font-mono tracking-wider">{label}</p>
+                  <p className="text-white text-xs font-medium mt-1 truncate">{value}</p>
                 </div>
               ))}
             </div>
 
-            {/* Payment status */}
-            <div className="bg-zinc-800 rounded-lg px-4 py-3 flex items-center justify-between">
-              <p className="text-zinc-400 text-xs">Payment Status</p>
-              <PaymentBadge status={getPaymentStatus(selected)} />
+            {/* Order status bar */}
+            <div className="bg-zinc-950/60 border border-zinc-800/80 rounded-lg p-3 flex items-center justify-between">
+              <span className="text-zinc-400 text-xs">Status Pesanan Saat Ini</span>
+              <PaymentBadge status={selected.status ?? "pending"} />
             </div>
 
-            {/* Tickets */}
-            {selected.tickets && selected.tickets.length > 0 && (
-              <div>
-                <p className="text-zinc-500 text-[10px] uppercase tracking-wider mb-2">Tickets</p>
-                <div className="flex flex-col gap-1.5">
-                  {selected.tickets.map(t => (
-                    <div key={t.id} className="bg-zinc-800 rounded-lg px-3 py-2 flex items-center justify-between">
-                      <span className="text-zinc-300 text-xs">Ticket #{t.id}</span>
-                      <span className="text-zinc-500 text-[10px]">{t.category?.name ?? "—"}</span>
+            {/* Direct Admin Order Approval Actions */}
+            {selected.status === "pending" && (
+              <div className="flex gap-2">
+                <button
+                  disabled={saving}
+                  onClick={async () => {
+                    setSaving(true);
+                    await orderApi.updateStatus(selected.id, "verified");
+                    setSaving(false);
+                    setModal(null);
+                    load();
+                  }}
+                  className="flex-1 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-xs font-semibold py-2 rounded-lg transition"
+                >
+                  ✓ Setujui & Terbitkan E-Ticket
+                </button>
+                <button
+                  disabled={saving}
+                  onClick={async () => {
+                    setSaving(true);
+                    await orderApi.updateStatus(selected.id, "cancelled");
+                    setSaving(false);
+                    setModal(null);
+                    load();
+                  }}
+                  className="flex-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 disabled:opacity-50 text-zinc-300 text-xs font-medium py-2 rounded-lg transition"
+                >
+                  ✕ Batalkan Pesanan
+                </button>
+              </div>
+            )}
+
+            {/* Items */}
+            {selectedDetail?.items && selectedDetail.items.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-zinc-500 text-[10px] font-mono uppercase tracking-wider">Kategori Tiket Dipesan</p>
+                <div className="space-y-1">
+                  {selectedDetail.items.map((it) => (
+                    <div
+                      key={it.id}
+                      className="bg-zinc-950/60 border border-zinc-800/80 rounded-lg px-3 py-2 flex items-center justify-between text-xs"
+                    >
+                      <div>
+                        <span className="text-white font-medium">{it.category_name}</span>
+                        <span className="text-zinc-500 text-[11px] ml-2 font-mono">x{it.quantity}</span>
+                      </div>
+                      <span className="text-zinc-300 font-mono">Rp {Number(it.subtotal).toLocaleString("id-ID")}</span>
                     </div>
                   ))}
                 </div>
               </div>
             )}
 
-            {needsVerification(selected) && (
-              <button
-                onClick={() => { setNewStatus("COMPLETED"); setModal("verify"); }}
-                className="w-full bg-red-700 hover:bg-red-600 text-white text-xs font-bold uppercase tracking-widest py-2.5 rounded-lg transition-all"
-              >
-                Verify Payment
-              </button>
+            {/* Payments & Verification */}
+            {selectedDetail?.payments && selectedDetail.payments.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-zinc-500 text-[10px] font-mono uppercase tracking-wider">Verifikasi Pembayaran</p>
+                <div className="space-y-2">
+                  {selectedDetail.payments.map((p) => (
+                    <div
+                      key={p.id}
+                      className="bg-zinc-950/60 border border-zinc-800/80 rounded-lg p-3 flex flex-col gap-2.5"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-white text-xs font-semibold uppercase">{p.method.replace("_", " ")}</p>
+                          <p className="text-zinc-400 text-xs font-mono">
+                            Rp {Number(p.amount).toLocaleString("id-ID")}
+                          </p>
+                        </div>
+                        <PaymentBadge status={p.status} />
+                      </div>
+
+                      {p.proof_url && (
+                        <div>
+                          <a
+                            href={getImageUrl(p.proof_url)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-red-400 hover:text-red-300 text-xs font-medium inline-flex items-center gap-1"
+                          >
+                            Lihat Bukti Bayar ↗
+                          </a>
+                        </div>
+                      )}
+
+                      {p.status === "pending" && (
+                        <div className="flex gap-2 pt-2 border-t border-zinc-800/60">
+                          <button
+                            disabled={saving}
+                            onClick={() => handleVerifyPayment(p.id, "verified")}
+                            className="flex-1 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-xs font-semibold py-1.5 rounded-lg transition"
+                          >
+                            Setujui Pembayaran
+                          </button>
+                          <button
+                            disabled={saving}
+                            onClick={() => handleVerifyPayment(p.id, "rejected")}
+                            className="flex-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 disabled:opacity-50 text-zinc-300 text-xs font-medium py-1.5 rounded-lg transition"
+                          >
+                            Tolak
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
         )}
-      </Modal>
-
-      {/* ── Verify Modal ───────────────────────────── */}
-      <Modal open={modal === "verify"} onClose={() => setModal(null)} title={`Verify Order #ORD-${String(selected?.id ?? "").padStart(4, "0")}`}>
-        <form onSubmit={handleVerify} className="flex flex-col gap-4">
-          <div className="bg-zinc-800 rounded-lg p-4 flex flex-col gap-2 text-xs text-zinc-400">
-            <div className="flex justify-between">
-              <span>Customer</span>
-              <span className="text-white font-medium">{selected?.user?.name ?? `User #${selected?.userId}`}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Event</span>
-              <span className="text-white font-medium">{selected?.event?.name ?? `Event #${selected?.eventId}`}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Amount</span>
-              <span className="text-white font-semibold">${(selected?.totalPrice ?? 0).toLocaleString("en", { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="flex justify-between items-center border-t border-zinc-700 pt-2 mt-1">
-              <span>Current Status</span>
-              <PaymentBadge status={getPaymentStatus(selected!)} />
-            </div>
-          </div>
-
-          <FormField label="Update Status to">
-            <select
-              value={newStatus}
-              onChange={e => setNewStatus(e.target.value)}
-              className="bg-zinc-800 border border-zinc-700 text-white text-sm px-3 py-2 rounded-lg outline-none focus:border-red-500/60 transition-colors"
-            >
-              <option value="COMPLETED">Completed / Paid</option>
-              <option value="FAILED">Failed</option>
-              <option value="CANCELLED">Cancelled</option>
-              <option value="PENDING">Pending</option>
-            </select>
-          </FormField>
-
-          <SubmitButton loading={saving}>Confirm Verification</SubmitButton>
-        </form>
-      </Modal>
-
-      {/* ── Delete Modal ───────────────────────────── */}
-      <Modal open={modal === "delete"} onClose={() => setModal(null)} title="Delete Order">
-        <div className="flex flex-col gap-4">
-          <div className="bg-zinc-800 rounded-lg p-3 flex flex-col gap-1">
-            <p className="text-white text-xs font-semibold">#ORD-{String(selected?.id ?? "").padStart(4, "0")}</p>
-            <p className="text-zinc-400 text-[10px]">{selected?.user?.name} · {selected?.event?.name}</p>
-            <p className="text-white text-xs font-bold">${(selected?.totalPrice ?? 0).toLocaleString("en", { minimumFractionDigits: 2 })}</p>
-          </div>
-          <p className="text-zinc-400 text-sm">Delete this order permanently? This cannot be undone.</p>
-          <div className="flex gap-3">
-            <button onClick={() => setModal(null)} className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold py-2.5 rounded-lg transition-all">Cancel</button>
-            <button onClick={handleDelete} disabled={saving} className="flex-1 bg-red-700 hover:bg-red-600 disabled:opacity-50 text-white text-xs font-semibold py-2.5 rounded-lg transition-all">
-              {saving ? "Deleting..." : "Delete"}
-            </button>
-          </div>
-        </div>
       </Modal>
     </div>
   );

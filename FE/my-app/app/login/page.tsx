@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { authApi } from "@/lib/api";
+import { getToken, getStoredUser } from "@/lib/auth";
 
 function LouderLogo() {
   return (
@@ -18,7 +19,6 @@ function LouderLogo() {
         </svg>
         <span className="text-white font-bold text-xl tracking-widest uppercase">Louder</span>
       </div>
-      <p className="text-zinc-500 text-xs tracking-widest uppercase">Admin Portal</p>
     </div>
   );
 }
@@ -30,6 +30,17 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [focused, setFocused] = useState<string | null>(null);
+
+  useEffect(() => {
+    const token = getToken();
+    const user = getStoredUser();
+    
+    if (token && user?.role === "admin") {
+      router.replace("/dashboard");
+    } else if (token && user?.role === "customer") {
+      router.replace("/events");
+    }
+  }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,18 +58,16 @@ export default function LoginPage() {
 
       const { token, user } = res.data;
 
-      // Role check — only admin can access the portal
-      if (user?.role !== "admin") {
-        setError("Akses ditolak. Portal ini hanya untuk admin. Silakan gunakan aplikasi mobile.");
-        setLoading(false);
-        return;
-      }
-
       // Store credentials
       if (token) localStorage.setItem("token", token);
       if (user) localStorage.setItem("user", JSON.stringify(user));
 
-      router.push("/dashboard");
+      // Role-based routing: admin ke /dashboard, user/customer ke mobile/landingpage
+      if (user?.role === "admin") {
+        router.push("/dashboard");
+      } else {
+        router.push("/events");
+      }
     } catch {
       setError("Terjadi kesalahan. Coba lagi.");
       setLoading(false);
@@ -85,17 +94,6 @@ export default function LoginPage() {
           <div className="flex flex-col gap-6">
             <LouderLogo />
 
-            {/* Role notice */}
-            <div className="flex items-start gap-2.5 bg-zinc-800/60 border border-zinc-700/50 rounded-lg px-3 py-2.5">
-              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" className="text-red-400 shrink-0 mt-0.5">
-                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5" />
-                <path d="M12 8v4M12 16h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              </svg>
-              <p className="text-zinc-400 text-[10px] leading-relaxed">
-                Portal ini <span className="text-white font-semibold">khusus admin</span>. Pengguna biasa silakan gunakan aplikasi mobile.
-              </p>
-            </div>
-
             {error && (
               <div className="bg-red-900/30 border border-red-700/50 rounded-lg px-4 py-2.5 text-red-400 text-xs text-center">
                 {error}
@@ -111,7 +109,7 @@ export default function LoginPage() {
                 </svg>
                 <input
                   type="email"
-                  placeholder="admin@louder.com"
+                  placeholder="email@domain.com"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   onFocus={() => setFocused("email")}
@@ -170,7 +168,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-center text-zinc-500 text-xs mt-5">
-          Belum punya akun admin?{" "}
+          Belum punya akun?{" "}
           <Link href="/register" className="text-red-400 hover:text-red-300 font-medium transition-colors">
             Daftar di sini
           </Link>

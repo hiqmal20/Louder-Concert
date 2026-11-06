@@ -59,9 +59,16 @@ export const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
     const data = await parseJsonSafe(res);
 
     if (res.status === 401 && typeof window !== "undefined") {
+      const currentPath = window.location.pathname;
+      const publicPaths = ["/", "/landingpage", "/login", "/register", "/events"];
+      const isPublicPath = publicPaths.some(p => currentPath === p || currentPath.startsWith(p));
+      
       localStorage.removeItem("token");
       localStorage.removeItem("user");
-      window.location.href = "/login";
+      
+      if (!isPublicPath) {
+        window.location.href = "/login";
+      }
     }
 
     return { ok: res.ok, status: res.status, data };
@@ -88,9 +95,16 @@ export const apiUpload = async (endpoint: string, formData: FormData, method: "P
     const data = await parseJsonSafe(res);
 
     if (res.status === 401 && typeof window !== "undefined") {
+      const currentPath = window.location.pathname;
+      const publicPaths = ["/", "/landingpage", "/login", "/register", "/events"];
+      const isPublicPath = publicPaths.some(p => currentPath === p || currentPath.startsWith(p));
+      
       localStorage.removeItem("token");
       localStorage.removeItem("user");
-      window.location.href = "/login";
+      
+      if (!isPublicPath) {
+        window.location.href = "/login";
+      }
     }
     return { ok: res.ok, status: res.status, data };
   } catch (error) {
@@ -113,10 +127,10 @@ export const authApi = {
 // ─── Users ───────────────────────────────────────────────────────────────────
 export const userApi = {
   getAll: () => apiFetch("/users"),
-  getById: (id: number) => apiFetch(`/users/${id}`),
-  update: (id: number, body: Record<string, unknown>) =>
-    apiFetch(`/users/${id}`, { method: "PUT", body: JSON.stringify(body) }),
-  remove: (id: number) => apiFetch(`/users/${id}`, { method: "DELETE" }),
+  updateProfile: (body: { name: string; phone?: string; password?: string }) =>
+    apiFetch("/users/me", { method: "PUT", body: JSON.stringify(body) }),
+  toggleActive: (id: number) =>
+    apiFetch(`/users/${id}/toggle-active`, { method: "PATCH" }),
 };
 
 // ─── Events ──────────────────────────────────────────────────────────────────
@@ -139,13 +153,12 @@ export const artistApi = {
 
 // ─── Tickets ─────────────────────────────────────────────────────────────────
 export const ticketApi = {
-  getAll: () => apiFetch("/tickets"),
-  getById: (id: number) => apiFetch(`/tickets/${id}`),
-  create: (body: Record<string, unknown>) =>
-    apiFetch("/tickets", { method: "POST", body: JSON.stringify(body) }),
-  update: (id: number, body: Record<string, unknown>) =>
-    apiFetch(`/tickets/${id}`, { method: "PUT", body: JSON.stringify(body) }),
-  remove: (id: number) => apiFetch(`/tickets/${id}`, { method: "DELETE" }),
+  getByOrder: (orderId: number) => apiFetch(`/tickets/order/${orderId}`),
+  validate: (code: string) =>
+    apiFetch("/tickets/validate", {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    }),
 };
 
 // ─── Ticket Categories ────────────────────────────────────────────────────────
@@ -164,15 +177,42 @@ export const ticketCategoryApi = {
 export const orderApi = {
   getAll: () => apiFetch("/orders"),
   getById: (id: number) => apiFetch(`/orders/${id}`),
-  update: (id: number, body: Record<string, unknown>) =>
-    apiFetch(`/orders/${id}`, { method: "PUT", body: JSON.stringify(body) }),
-  remove: (id: number) => apiFetch(`/orders/${id}`, { method: "DELETE" }),
+  create: (body: { event_id: number; items: { ticket_category_id: number; quantity: number }[]; promo_code?: string; seat_numbers?: string }) =>
+    apiFetch("/orders", { method: "POST", body: JSON.stringify(body) }),
+  updateStatus: (id: number, status: string) =>
+    apiFetch(`/orders/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
+};
+
+// ─── Promos ───────────────────────────────────────────────────────────────────
+export const promoApi = {
+  getAll: () => apiFetch("/promos"),
+  check: (code: string, amount: number, event_id?: number) =>
+    apiFetch("/promos/check", { method: "POST", body: JSON.stringify({ code, amount, event_id }) }),
+  create: (body: Record<string, unknown> | FormData) =>
+    body instanceof FormData
+      ? apiUpload("/promos", body, "POST")
+      : apiFetch("/promos", { method: "POST", body: JSON.stringify(body) }),
+  update: (id: number, body: Record<string, unknown> | FormData) =>
+    body instanceof FormData
+      ? apiUpload(`/promos/${id}`, body, "PUT")
+      : apiFetch(`/promos/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  remove: (id: number) => apiFetch(`/promos/${id}`, { method: "DELETE" }),
 };
 
 // ─── Payments ─────────────────────────────────────────────────────────────────
 export const paymentApi = {
-  getAll: () => apiFetch("/payments"),
-  getById: (id: number) => apiFetch(`/payments/${id}`),
+  getByOrder: (orderId: number) => apiFetch(`/payments/order/${orderId}`),
+  verify: (id: number, status: "verified" | "rejected") =>
+    apiFetch(`/payments/${id}/verify`, { method: "PATCH", body: JSON.stringify({ status }) }),
   update: (id: number, body: Record<string, unknown>) =>
-    apiFetch(`/payments/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+    apiFetch(`/payments/${id}/verify`, { method: "PATCH", body: JSON.stringify(body) }),
+};
+
+// ─── Festival Posters ────────────────────────────────────────────────────────
+export const posterApi = {
+  getAll: (status?: string) => apiFetch(`/posters${status ? `?status=${status}` : ""}`),
+  getById: (id: number) => apiFetch(`/posters/${id}`),
+  create: (formData: FormData) => apiUpload("/posters", formData, "POST"),
+  update: (id: number, formData: FormData) => apiUpload(`/posters/${id}`, formData, "PUT"),
+  remove: (id: number) => apiFetch(`/posters/${id}`, { method: "DELETE" }),
 };

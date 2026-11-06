@@ -2,23 +2,35 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getToken, isAdmin } from "@/lib/auth";
+import { getToken, getStoredUser } from "@/lib/auth";
 
-export function AdminGuard({ children }: { children: React.ReactNode }) {
+interface AuthGuardProps {
+  children: React.ReactNode;
+  allowedRoles?: ("admin" | "customer" | string)[];
+}
+
+export function AuthGuard({ children, allowedRoles }: AuthGuardProps) {
   const router = useRouter();
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    if (!getToken()) {
+    const token = getToken();
+    if (!token) {
       router.replace("/login");
       return;
     }
-    if (!isAdmin()) {
-      router.replace("/unauthorized");
-      return;
+
+    const user = getStoredUser();
+    if (allowedRoles && allowedRoles.length > 0) {
+      const userRole = user?.role || "customer";
+      if (!allowedRoles.includes(userRole)) {
+        router.replace(userRole === "admin" ? "/dashboard" : "/unauthorized");
+        return;
+      }
     }
+
     setChecking(false);
-  }, [router]);
+  }, [router, allowedRoles]);
 
   if (checking) {
     return (
@@ -32,4 +44,12 @@ export function AdminGuard({ children }: { children: React.ReactNode }) {
   }
 
   return <>{children}</>;
+}
+
+export function AdminGuard({ children }: { children: React.ReactNode }) {
+  return <AuthGuard allowedRoles={["admin"]}>{children}</AuthGuard>;
+}
+
+export function CustomerGuard({ children }: { children: React.ReactNode }) {
+  return <AuthGuard allowedRoles={["customer"]}>{children}</AuthGuard>;
 }

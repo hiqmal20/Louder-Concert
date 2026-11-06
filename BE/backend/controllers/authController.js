@@ -44,7 +44,14 @@ export const login = async (req, res, next) => {
 
     res.json({
       token,
-      user: { id: user.id, name: user.name, email: user.email, role: user.role },
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        avatar_url: user.avatar_url,
+      },
     });
   } catch (err) { next(err); }
 };
@@ -52,7 +59,7 @@ export const login = async (req, res, next) => {
 export const me = async (req, res, next) => {
   try {
     const [rows] = await db.query(
-      "SELECT id, name, email, phone, role, created_at FROM users WHERE id = ?",
+      "SELECT id, name, email, phone, role, avatar_url, created_at FROM users WHERE id = ?",
       [req.user.id]
     );
     if (!rows.length) return res.status(404).json({ message: "User tidak ditemukan" });

@@ -9,9 +9,11 @@ import userRoutes           from "./routes/userRoutes.js";
 import artistRoutes         from "./routes/artistRoutes.js";
 import eventRoutes          from "./routes/eventRoutes.js";
 import ticketCategoryRoutes from "./routes/ticketCategoryRoutes.js";
+import promoRoutes          from "./routes/promoRoutes.js";
 import orderRoutes          from "./routes/orderRoutes.js";
 import paymentRoutes        from "./routes/paymentRoutes.js";
 import ticketRoutes         from "./routes/ticketRoutes.js";
+import posterRoutes         from "./routes/posterRoutes.js";
 import errorHandler         from "./middlewares/errorHandler.js";
 
 dotenv.config();
@@ -22,7 +24,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
 
 const corsOptions = {
-  origin: ["http://localhost:3000", "http://localhost:3001", "http://127.0.0.1:3000"],
+  origin: true,
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
@@ -30,7 +32,8 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
-app.use(express.json());
+app.use(express.json({ limit: "25mb" }));
+app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 
 // Test route
 app.get("/", (req, res) => {
@@ -43,9 +46,11 @@ app.use("/api/louder/users",             userRoutes);
 app.use("/api/louder/artists",           artistRoutes);
 app.use("/api/louder/events",            eventRoutes);
 app.use("/api/louder/ticket-categories", ticketCategoryRoutes);
+app.use("/api/louder/promos",            promoRoutes);
 app.use("/api/louder/orders",            orderRoutes);
 app.use("/api/louder/payments",          paymentRoutes);
 app.use("/api/louder/tickets",           ticketRoutes);
+app.use("/api/louder/posters",           posterRoutes);
 
 // Serve uploads folder
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));

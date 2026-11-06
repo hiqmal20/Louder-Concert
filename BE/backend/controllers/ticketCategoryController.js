@@ -1,5 +1,17 @@
 import db from "../database.js";
 
+export const getAll = async (req, res, next) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT tc.*, e.name AS event_name
+       FROM ticket_categories tc
+       LEFT JOIN events e ON e.id = tc.event_id
+       ORDER BY tc.created_at DESC`
+    );
+    res.json(rows);
+  } catch (err) { next(err); }
+};
+
 export const getByEvent = async (req, res, next) => {
   try {
     const [rows] = await db.query(
@@ -25,12 +37,19 @@ export const create = async (req, res, next) => {
 
 export const update = async (req, res, next) => {
   try {
-    const { name, price, quota } = req.body;
-    const [result] = await db.query(
-      "UPDATE ticket_categories SET name=?, price=?, quota=? WHERE id=?",
-      [name, price, quota, req.params.id]
+    const { event_id, name, price, quota } = req.body;
+    const [current] = await db.query("SELECT * FROM ticket_categories WHERE id=?", [req.params.id]);
+    if (!current.length) return res.status(404).json({ message: "Kategori tidak ditemukan" });
+
+    const finalEventId = event_id || current[0].event_id;
+    const finalName = name !== undefined && name.trim() ? name.trim() : current[0].name;
+    const finalPrice = price !== undefined ? Number(price) : current[0].price;
+    const finalQuota = quota !== undefined ? Number(quota) : current[0].quota;
+
+    await db.query(
+      "UPDATE ticket_categories SET event_id=?, name=?, price=?, quota=? WHERE id=?",
+      [finalEventId, finalName, finalPrice, finalQuota, req.params.id]
     );
-    if (!result.affectedRows) return res.status(404).json({ message: "Kategori tidak ditemukan" });
     res.json({ message: "Kategori tiket berhasil diupdate" });
   } catch (err) { next(err); }
 };
