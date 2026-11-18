@@ -1,10 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { authApi } from "@/lib/api";
-import { getToken, getStoredUser } from "@/lib/auth";
 
 function LouderLogo() {
   return (
@@ -30,17 +29,6 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [focused, setFocused] = useState<string | null>(null);
-
-  useEffect(() => {
-    const token = getToken();
-    const user = getStoredUser();
-    
-    if (token && user?.role === "admin") {
-      router.replace("/dashboard");
-    } else if (token && user?.role === "customer") {
-      router.replace("/events");
-    }
-  }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

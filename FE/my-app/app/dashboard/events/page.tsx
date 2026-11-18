@@ -16,7 +16,7 @@ interface Event {
   id: number; name: string; description?: string;
   event_date?: string; date?: string;
   event_time?: string;
-  location?: string; venue?: string; status?: string;
+  location?: string; venue?: string; city?: string; status?: string;
   capacity?: number; ticketsSold?: number;
   tickets_sold?: number;
   total_quota?: number;
@@ -101,7 +101,7 @@ export default function EventsPage() {
   const [selected, setSelected] = useState<Event | null>(null);
   const [form, setForm] = useState({
     name: "", description: "", event_date: "", event_time: "",
-    venue: "", status: "published", capacity: 0, has_seats: true, artistIds: [] as number[],
+    venue: "", city: "", status: "published", capacity: 0, has_seats: true, artistIds: [] as number[],
   });
   const [posterFile, setPosterFile] = useState<File | null>(null);
   const [posterPreview, setPosterPreview] = useState("");
@@ -137,7 +137,7 @@ export default function EventsPage() {
   };
 
   const resetForm = () => {
-    setForm({ name: "", description: "", event_date: "", event_time: "", venue: "", status: "published", capacity: 0, has_seats: true, artistIds: [] });
+    setForm({ name: "", description: "", event_date: "", event_time: "", venue: "", city: "", status: "published", capacity: 0, has_seats: true, artistIds: [] });
     setPosterFile(null); setPosterPreview("");
     setLineupFile(null); setLineupPreview("");
     setArtistSearch("");
@@ -181,6 +181,7 @@ export default function EventsPage() {
       event_date: formattedDate,
       event_time: formattedTime,
       venue: ev.venue ?? ev.location ?? "",
+      city: ev.city ?? "",
       status: (ev.status ?? "published").toLowerCase(),
       capacity: ev.capacity ?? 0,
       has_seats: ev.has_seats !== undefined ? Boolean(Number(ev.has_seats)) : true,
@@ -203,6 +204,7 @@ export default function EventsPage() {
     fd.append("event_date", form.event_date);
     fd.append("event_time", form.event_time || "19:00:00");
     fd.append("venue", form.venue.trim());
+    fd.append("city", form.city.trim());
     fd.append("status", form.status.toLowerCase());
     fd.append("has_seats", form.has_seats ? "1" : "0");
     fd.append("artist_ids", JSON.stringify(form.artistIds));
@@ -786,7 +788,36 @@ export default function EventsPage() {
             <FormField label="Tanggal"><Input required type="date" value={form.event_date} onChange={e=>setForm(f=>({...f,event_date:e.target.value}))} /></FormField>
             <FormField label="Waktu (WIB)"><Input type="time" value={form.event_time} onChange={e=>setForm(f=>({...f,event_time:e.target.value}))} /></FormField>
           </div>
-          <FormField label="Lokasi & Venue"><Input required value={form.venue} onChange={e=>setForm(f=>({...f,venue:e.target.value}))} placeholder="Nama Venue, Kota" /></FormField>
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="Nama Venue"><Input required value={form.venue} onChange={e=>setForm(f=>({...f,venue:e.target.value}))} placeholder="Contoh: Gelora Park" /></FormField>
+            <FormField label="Kota Penyelenggaraan">
+              <Input
+                required
+                list="edit-indonesia-cities-list"
+                value={form.city}
+                onChange={e=>setForm(f=>({...f,city:e.target.value}))}
+                placeholder="Contoh: Surabaya, Jakarta"
+              />
+              <datalist id="edit-indonesia-cities-list">
+                <option value="Jakarta" />
+                <option value="Surabaya" />
+                <option value="Bandung" />
+                <option value="Yogyakarta" />
+                <option value="Bali" />
+                <option value="Medan" />
+                <option value="Semarang" />
+                <option value="Malang" />
+                <option value="Solo" />
+                <option value="Makassar" />
+                <option value="Palembang" />
+                <option value="Balikpapan" />
+                <option value="Batam" />
+                <option value="Tangerang" />
+                <option value="Bekasi" />
+                <option value="Bogor" />
+              </datalist>
+            </FormField>
+          </div>
 
           {/* Seat selection requirement toggle */}
           <div className="bg-zinc-950/60 border border-zinc-800/80 rounded-lg p-3.5 flex items-center justify-between">

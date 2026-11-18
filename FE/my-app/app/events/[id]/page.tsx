@@ -215,7 +215,10 @@ export default function EventCheckoutPage({ params }: { params: Promise<{ id: st
           <h3 className="text-white font-bold text-sm uppercase tracking-wider">Kategori Tiket</h3>
 
           {(!event.ticket_categories || event.ticket_categories.length === 0) ? (
-            <p className="text-zinc-500 text-xs py-4 text-center">Belum ada kategori tiket untuk konser ini.</p>
+            <div className="rounded-2xl bg-zinc-900/70 border border-zinc-800 p-5 text-center">
+              <p className="text-amber-400 font-bold text-sm">Coming Soon</p>
+              <p className="text-zinc-500 text-xs mt-1">Harga dan kategori tiket untuk konser ini akan segera diumumkan.</p>
+            </div>
           ) : (
             event.ticket_categories.map((cat) => {
               const quota = cat.quota || 0;

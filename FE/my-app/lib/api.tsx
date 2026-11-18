@@ -157,8 +157,10 @@ export const ticketApi = {
   validate: (code: string) =>
     apiFetch("/tickets/validate", {
       method: "POST",
-      body: JSON.stringify({ code }),
+      body: JSON.stringify({ code, ticket_code: code }),
     }),
+  getRecentScans: (limit = 20) => apiFetch(`/tickets/recent-scans?limit=${limit}`),
+  getStats: () => apiFetch("/tickets/stats"),
 };
 
 // ─── Ticket Categories ────────────────────────────────────────────────────────
@@ -215,4 +217,11 @@ export const posterApi = {
   create: (formData: FormData) => apiUpload("/posters", formData, "POST"),
   update: (id: number, formData: FormData) => apiUpload(`/posters/${id}`, formData, "PUT"),
   remove: (id: number) => apiFetch(`/posters/${id}`, { method: "DELETE" }),
+};
+
+// ─── Landing Page Settings ──────────────────────────────────────────────────
+export const landingSettingsApi = {
+  get: () => apiFetch("/landing-settings"),
+  update: (body: Record<string, unknown>) =>
+    apiFetch("/landing-settings", { method: "PUT", body: JSON.stringify(body) }),
 };

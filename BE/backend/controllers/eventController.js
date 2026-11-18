@@ -41,14 +41,16 @@ export const getOne = async (req, res, next) => {
     const [categories] = await db.query(
       "SELECT * FROM ticket_categories WHERE event_id = ?", [req.params.id]
     );
+    const validPrices = categories.map((c) => Number(c.price || 0)).filter((p) => p > 0);
+    const min_price = validPrices.length > 0 ? Math.min(...validPrices) : 0;
 
-    res.json({ ...events[0], artists, ticket_categories: categories });
+    res.json({ ...events[0], min_price, artists, ticket_categories: categories });
   } catch (err) { next(err); }
 };
 
 export const create = async (req, res, next) => {
   try {
-    const { name, description, venue, event_date, event_time, status, artist_ids, has_seats } = req.body;
+    const { name, description, venue, city, event_date, event_time, status, artist_ids, has_seats } = req.body;
     if (!name || !venue || !event_date || !event_time) {
       return res.status(400).json({ message: "name, venue, event_date, event_time wajib diisi" });
     }
@@ -66,10 +68,11 @@ export const create = async (req, res, next) => {
     if (!lineup_poster_url && req.body.lineup_poster_url) lineup_poster_url = req.body.lineup_poster_url;
 
     const finalHasSeats = has_seats !== undefined ? (Number(has_seats) ? 1 : 0) : 1;
+    const finalCity = city && String(city).trim() ? String(city).trim() : null;
 
     const [result] = await db.query(
-      "INSERT INTO events (name, description, venue, event_date, event_time, poster_url, lineup_poster_url, status, has_seats, created_by) VALUES (?,?,?,?,?,?,?,?,?,?)",
-      [name, description || null, venue, event_date, event_time, poster_url, lineup_poster_url, status || "draft", finalHasSeats, req.user.id]
+      "INSERT INTO events (name, description, venue, city, event_date, event_time, poster_url, lineup_poster_url, status, has_seats, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+      [name, description || null, venue, finalCity, event_date, event_time, poster_url, lineup_poster_url, status || "draft", finalHasSeats, req.user.id]
     );
     const eventId = result.insertId;
 
@@ -85,7 +88,7 @@ export const create = async (req, res, next) => {
 
 export const update = async (req, res, next) => {
   try {
-    const { name, description, venue, event_date, event_time, status, artist_ids, has_seats } = req.body;
+    const { name, description, venue, city, event_date, event_time, status, artist_ids, has_seats } = req.body;
     
     const [current] = await db.query("SELECT * FROM events WHERE id=?", [req.params.id]);
     if (!current.length) return res.status(404).json({ message: "Event tidak ditemukan" });
@@ -109,14 +112,15 @@ export const update = async (req, res, next) => {
     const finalName = name !== undefined && name.trim() ? name.trim() : current[0].name;
     const finalDescription = description !== undefined ? (description.trim() || null) : current[0].description;
     const finalVenue = venue !== undefined && venue.trim() ? venue.trim() : current[0].venue;
+    const finalCity = city !== undefined ? (String(city).trim() || null) : current[0].city;
     const finalEventDate = event_date || current[0].event_date;
     const finalEventTime = event_time || current[0].event_time;
     const finalStatus = status || current[0].status;
     const finalHasSeats = has_seats !== undefined ? (Number(has_seats) ? 1 : 0) : current[0].has_seats;
 
     await db.query(
-      "UPDATE events SET name=?, description=?, venue=?, event_date=?, event_time=?, poster_url=?, lineup_poster_url=?, status=?, has_seats=? WHERE id=?",
-      [finalName, finalDescription, finalVenue, finalEventDate, finalEventTime, poster_url, lineup_poster_url, finalStatus, finalHasSeats, req.params.id]
+      "UPDATE events SET name=?, description=?, venue=?, city=?, event_date=?, event_time=?, poster_url=?, lineup_poster_url=?, status=?, has_seats=? WHERE id=?",
+      [finalName, finalDescription, finalVenue, finalCity, finalEventDate, finalEventTime, poster_url, lineup_poster_url, finalStatus, finalHasSeats, req.params.id]
     );
 
     const ids = typeof artist_ids === "string" ? JSON.parse(artist_ids) : artist_ids;

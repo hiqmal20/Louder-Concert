@@ -14,6 +14,7 @@ import orderRoutes          from "./routes/orderRoutes.js";
 import paymentRoutes        from "./routes/paymentRoutes.js";
 import ticketRoutes         from "./routes/ticketRoutes.js";
 import posterRoutes         from "./routes/posterRoutes.js";
+import landingSettingsRoutes from "./routes/landingSettingsRoutes.js";
 import errorHandler         from "./middlewares/errorHandler.js";
 
 dotenv.config();
@@ -51,6 +52,7 @@ app.use("/api/louder/orders",            orderRoutes);
 app.use("/api/louder/payments",          paymentRoutes);
 app.use("/api/louder/tickets",           ticketRoutes);
 app.use("/api/louder/posters",           posterRoutes);
+app.use("/api/louder/landing-settings",  landingSettingsRoutes);
 
 // Serve uploads folder
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));

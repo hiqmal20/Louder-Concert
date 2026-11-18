@@ -227,7 +227,6 @@ export default function DashboardPage() {
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="max-w-2xl">
             <div className="flex items-center gap-2 mb-2">
-              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
               <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-400">
                 Pusat Kendali Promotor
               </span>
@@ -245,10 +244,6 @@ export default function DashboardPage() {
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-950/80 border border-zinc-800">
                 <span className="text-zinc-500">Event Aktif:</span>
                 <span className="text-white font-mono font-bold">{activeEvents.length} Tayang</span>
-              </div>
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-950/80 border border-zinc-800">
-                <span className="text-zinc-500">Tiket Terdistribusi:</span>
-                <span className="text-white font-mono font-bold">{totalTicketsSold.toLocaleString("id-ID")} Tiket</span>
               </div>
               {occupancyRate > 0 && (
                 <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-950/80 border border-zinc-800">

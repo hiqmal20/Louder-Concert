@@ -134,9 +134,11 @@ export default function PromosPage() {
   const [promos, setPromos] = useState<Promo[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
-  const [modal, setModal] = useState<"create" | "edit" | "delete" | null>(null);
+  const [modal, setModal] = useState<"create" | "edit" | "delete" | "add_quota" | null>(null);
   const [selected, setSelected] = useState<Promo | null>(null);
   const [form, setForm] = useState(EMPTY_PROMO);
+  const [addQuotaAmount, setAddQuotaAmount] = useState<number>(50);
+  const [reactivatePromo, setReactivatePromo] = useState<boolean>(true);
   const [bannerFile, setBannerFile] = useState<File | null>(null);
   const [bannerPreview, setBannerPreview] = useState("");
   const [saving, setSaving] = useState(false);
@@ -185,6 +187,27 @@ export default function PromosPage() {
   const openDelete = (p: Promo) => {
     setSelected(p);
     setModal("delete");
+  };
+
+  const openAddQuota = (p: Promo) => {
+    setSelected(p);
+    setAddQuotaAmount(50);
+    setReactivatePromo(p.is_active === 0);
+    setModal("add_quota");
+  };
+
+  const handleAddQuota = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selected || addQuotaAmount <= 0) return;
+    setSaving(true);
+    const newTotalQuota = (selected.quota || 0) + Number(addQuotaAmount);
+    await promoApi.update(selected.id, {
+      quota: newTotalQuota,
+      is_active: reactivatePromo ? 1 : (selected.is_active ?? 1),
+    });
+    setSaving(false);
+    setModal(null);
+    load();
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -241,6 +264,7 @@ export default function PromosPage() {
       filterType === "ALL" ||
       (filterType === "ACTIVE" && p.is_active === 1) ||
       (filterType === "INACTIVE" && p.is_active === 0) ||
+      (filterType === "EXHAUSTED" && (p.quota || 0) - (p.used_count || 0) <= 0) ||
       (filterType === "PERCENTAGE" && p.discount_type === "percentage") ||
       (filterType === "FIXED" && p.discount_type === "fixed");
 
@@ -312,6 +336,7 @@ export default function PromosPage() {
           <option value="ALL" className="bg-zinc-900 text-white">Semua Status</option>
           <option value="ACTIVE" className="bg-zinc-900 text-white">Aktif Saja</option>
           <option value="INACTIVE" className="bg-zinc-900 text-white">Nonaktif</option>
+          <option value="EXHAUSTED" className="bg-zinc-900 text-white">Kuota Habis</option>
           <option value="PERCENTAGE" className="bg-zinc-900 text-white">Diskon Persentase (%)</option>
           <option value="FIXED" className="bg-zinc-900 text-white">Diskon Nominal (Rp)</option>
         </select>
@@ -401,7 +426,16 @@ export default function PromosPage() {
                 <div className="col-span-1 text-center font-mono">
                   <span className="text-white text-xs font-medium">{used}</span>
                   <span className="text-zinc-500 text-[10px]"> / {quota}</span>
-                  {remaining === 0 && <p className="text-red-400 text-[9px] font-bold mt-0.5">Habis</p>}
+                  {remaining === 0 && (
+                    <button
+                      type="button"
+                      onClick={() => openAddQuota(p)}
+                      className="mt-1 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-red-500/15 hover:bg-emerald-500/20 border border-red-500/30 hover:border-emerald-500/40 text-red-400 hover:text-emerald-300 text-[9px] font-bold transition cursor-pointer"
+                      title="Kuota habis — Klik untuk tambah kuota"
+                    >
+                      Habis • +Kuota
+                    </button>
+                  )}
                 </div>
 
                 {/* Status */}
@@ -411,6 +445,19 @@ export default function PromosPage() {
 
                 {/* Aksi */}
                 <div className="col-span-1 flex items-center justify-end gap-1">
+                  <button
+                    onClick={() => openAddQuota(p)}
+                    className={`p-1.5 rounded-md transition cursor-pointer ${
+                      remaining === 0
+                        ? "text-emerald-400 bg-emerald-950/40 hover:bg-emerald-900/50 border border-emerald-800/50"
+                        : "text-zinc-400 hover:text-emerald-400 hover:bg-emerald-950/20"
+                    }`}
+                    title="Tambah Kuota Diskon"
+                  >
+                    <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
+                      <path d="M12 5v14M5 12h14" strokeLinecap="round" />
+                    </svg>
+                  </button>
                   <button
                     onClick={() => openEdit(p)}
                     className="text-zinc-400 hover:text-white p-1.5 rounded-md hover:bg-zinc-800 transition cursor-pointer"
@@ -557,6 +604,102 @@ export default function PromosPage() {
 
           <SubmitButton loading={saving}>{modal === "create" ? "Terbitkan Promo" : "Simpan Perubahan"}</SubmitButton>
         </form>
+      </Modal>
+
+      {/* Add Quota Modal */}
+      <Modal
+        open={modal === "add_quota"}
+        onClose={() => setModal(null)}
+        title="Tambah Kuota Diskon"
+      >
+        {selected && (
+          <form onSubmit={handleAddQuota} className="flex flex-col gap-4">
+            <div className="bg-zinc-900/70 border border-zinc-800 rounded-xl p-3.5 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-zinc-400 text-xs">Kode Promo</span>
+                <span className="bg-red-500/10 border border-red-500/20 text-red-400 font-mono font-semibold text-xs px-2 py-0.5 rounded">
+                  {selected.code}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-zinc-400">Kuota Saat Ini (Terpakai / Total)</span>
+                <span className="text-white font-mono">
+                  {selected.used_count || 0} / {selected.quota || 0}
+                  <span className={`ml-2 text-[11px] ${Math.max(0, (selected.quota || 0) - (selected.used_count || 0)) === 0 ? "text-red-400 font-semibold" : "text-emerald-400"}`}>
+                    (Sisa {Math.max(0, (selected.quota || 0) - (selected.used_count || 0))})
+                  </span>
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <FormField label="Jumlah Tambahan Kuota">
+                <Input
+                  type="number"
+                  min={1}
+                  required
+                  value={addQuotaAmount || ""}
+                  onChange={(e) => setAddQuotaAmount(Math.max(0, Number(e.target.value)))}
+                  placeholder="Contoh: 50"
+                />
+              </FormField>
+
+              <div className="flex items-center gap-2">
+                {[10, 25, 50, 100].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setAddQuotaAmount(preset)}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-mono font-medium border transition cursor-pointer ${
+                      addQuotaAmount === preset
+                        ? "bg-red-600/20 border-red-500 text-red-300"
+                        : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700"
+                    }`}
+                  >
+                    +{preset}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-emerald-950/20 border border-emerald-800/40 rounded-xl p-3 flex items-center justify-between text-xs">
+              <span className="text-zinc-300">Total Kuota Setelah Ditambah</span>
+              <div className="text-right font-mono">
+                <span className="text-emerald-400 font-bold text-sm">
+                  {(selected.quota || 0) + Number(addQuotaAmount || 0)}
+                </span>
+                <span className="text-zinc-400 text-[11px] ml-1.5">
+                  (Sisa baru: {Math.max(0, (selected.quota || 0) - (selected.used_count || 0)) + Number(addQuotaAmount || 0)})
+                </span>
+              </div>
+            </div>
+
+            {selected.is_active === 0 && (
+              <label className="flex items-center gap-2.5 text-xs text-zinc-300 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={reactivatePromo}
+                  onChange={(e) => setReactivatePromo(e.target.checked)}
+                  className="rounded border-zinc-700 bg-zinc-800 accent-red-600"
+                />
+                Aktifkan kembali promo ini agar bisa langsung digunakan
+              </label>
+            )}
+
+            <div className="flex gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setModal(null)}
+                className="flex-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 text-xs font-semibold py-2.5 rounded-lg transition cursor-pointer"
+              >
+                Batal
+              </button>
+              <div className="flex-1">
+                <SubmitButton loading={saving}>Tambah Kuota</SubmitButton>
+              </div>
+            </div>
+          </form>
+        )}
       </Modal>
 
       {/* Delete Modal */}

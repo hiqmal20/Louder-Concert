@@ -23,6 +23,7 @@ export default function CreateEventPage() {
     event_date: "",
     event_time: "19:00",
     venue: "",
+    city: "",
     status: "published",
     has_seats: true,
   });
@@ -70,6 +71,7 @@ export default function CreateEventPage() {
     fd.append("event_date", form.event_date);
     fd.append("event_time", form.event_time || "19:00:00");
     fd.append("venue", form.venue.trim());
+    fd.append("city", form.city.trim());
     fd.append("status", form.status.toLowerCase());
     fd.append("has_seats", form.has_seats ? "1" : "0");
     if (artistIds.length > 0) fd.append("artist_ids", JSON.stringify(artistIds));
@@ -380,14 +382,43 @@ export default function CreateEventPage() {
             </FormField>
           </div>
 
-          <FormField label="Lokasi & Venue">
-            <Input
-              required
-              value={form.venue}
-              onChange={(e) => setForm((f) => ({ ...f, venue: e.target.value }))}
-              placeholder="Contoh: Gelora Bung Karno, Jakarta Pusat"
-            />
-          </FormField>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <FormField label="Nama Venue / Tempat Konser">
+              <Input
+                required
+                value={form.venue}
+                onChange={(e) => setForm((f) => ({ ...f, venue: e.target.value }))}
+                placeholder="Contoh: Gelora Park, GBK, JIExpo"
+              />
+            </FormField>
+            <FormField label="Kota Penyelenggaraan">
+              <Input
+                required
+                list="indonesia-cities-list"
+                value={form.city}
+                onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
+                placeholder="Contoh: Surabaya, Jakarta, Bandung, Bali"
+              />
+              <datalist id="indonesia-cities-list">
+                <option value="Jakarta" />
+                <option value="Surabaya" />
+                <option value="Bandung" />
+                <option value="Yogyakarta" />
+                <option value="Bali" />
+                <option value="Medan" />
+                <option value="Semarang" />
+                <option value="Malang" />
+                <option value="Solo" />
+                <option value="Makassar" />
+                <option value="Palembang" />
+                <option value="Balikpapan" />
+                <option value="Batam" />
+                <option value="Tangerang" />
+                <option value="Bekasi" />
+                <option value="Bogor" />
+              </datalist>
+            </FormField>
+          </div>
 
           {/* Seat selection toggle */}
           <div className="bg-zinc-950/60 border border-zinc-800/80 rounded-lg p-3.5 flex items-center justify-between">

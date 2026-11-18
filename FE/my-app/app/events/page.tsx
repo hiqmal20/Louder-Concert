@@ -17,6 +17,7 @@ interface Event {
   artists?: string;
   tickets_sold?: number;
   total_quota?: number;
+  min_price?: number | string;
 }
 
 export default function MobileEventsPage() {
@@ -219,8 +220,18 @@ export default function MobileEventsPage() {
 
                     <div className="pt-3 border-t border-zinc-800 flex items-center justify-between">
                       <div>
-                        <p className="text-[10px] uppercase tracking-wider text-zinc-500">Mulai Pesan</p>
-                        <p className="text-white font-mono font-bold text-sm">Tiket Tersedia</p>
+                        <p className="text-[10px] uppercase tracking-wider text-zinc-500">
+                          {Number(ev.min_price) > 0 ? "Mulai dari" : "Harga Tiket"}
+                        </p>
+                        <p
+                          className={`font-mono font-bold text-sm ${
+                            Number(ev.min_price) > 0 ? "text-white" : "text-amber-400"
+                          }`}
+                        >
+                          {Number(ev.min_price) > 0
+                            ? `Rp ${Number(ev.min_price).toLocaleString("id-ID")}`
+                            : "Coming Soon"}
+                        </p>
                       </div>
 
                       <Link

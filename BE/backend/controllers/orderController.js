@@ -7,7 +7,7 @@ export const getAll = async (req, res, next) => {
   try {
     let sql = `
       SELECT o.*, u.name AS customer_name,
-             e.name AS event_name, e.venue AS event_venue,
+             e.name AS event_name, e.venue AS event_venue, e.city AS event_city,
              e.event_date, e.event_time, e.poster_url,
              (SELECT GROUP_CONCAT(DISTINCT a.genre SEPARATOR ', ') FROM event_artist ea JOIN artists a ON a.id = ea.artist_id WHERE ea.event_id = e.id) AS genres,
              (SELECT tc.name FROM order_items oi JOIN ticket_categories tc ON tc.id = oi.ticket_category_id WHERE oi.order_id = o.id LIMIT 1) AS category_name,

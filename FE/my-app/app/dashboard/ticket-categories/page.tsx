@@ -28,6 +28,23 @@ const EMPTY = {
   event_id: 0,
 };
 
+const CATEGORY_TEMPLATES = [
+  { label: "VVIP", name: "VVIP", price: 2500000, quota: 100 },
+  { label: "VIP", name: "VIP", price: 1500000, quota: 200 },
+  { label: "VIP Diamond", name: "VIP Diamond", price: 2000000, quota: 150 },
+  { label: "CAT 1 (Platinum / Tribune Bawah)", name: "CAT 1", price: 1000000, quota: 300 },
+  { label: "CAT 2 (Gold / Tribune Tengah)", name: "CAT 2", price: 750000, quota: 400 },
+  { label: "CAT 3 (Silver / Tribune Atas)", name: "CAT 3", price: 500000, quota: 500 },
+  { label: "Festival (Free Standing)", name: "Festival", price: 650000, quota: 800 },
+  { label: "Festival A (Standing Kiri)", name: "Festival A", price: 650000, quota: 400 },
+  { label: "Festival B (Standing Kanan)", name: "Festival B", price: 650000, quota: 400 },
+  { label: "Regular", name: "Regular", price: 350000, quota: 500 },
+  { label: "Early Bird", name: "Early Bird", price: 250000, quota: 200 },
+  { label: "Presale 1", name: "Presale 1", price: 300000, quota: 300 },
+  { label: "Presale 2", name: "Presale 2", price: 400000, quota: 300 },
+  { label: "Tribun", name: "Tribun", price: 450000, quota: 500 },
+];
+
 const CATEGORY_PALETTE = [
   "#f59e0b", // Amber / VIP
   "#38bdf8", // Sky Blue / CAT 1
@@ -60,6 +77,7 @@ export default function TicketCategoriesPage() {
   const [modal, setModal] = useState<"create" | "edit" | "delete" | null>(null);
   const [selected, setSelected] = useState<TicketCategory | null>(null);
   const [form, setForm] = useState(EMPTY);
+  const [selectedTemplate, setSelectedTemplate] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
 
@@ -82,12 +100,15 @@ export default function TicketCategoriesPage() {
     cat.event_name ?? events.find((e) => e.id === cat.event_id)?.name ?? "";
 
   const openCreate = () => {
+    setSelectedTemplate("");
     setForm({ ...EMPTY, event_id: selectedEventId !== "ALL" ? selectedEventId : (events[0]?.id ?? 0) });
     setModal("create");
   };
 
   const openEdit = (c: TicketCategory) => {
     setSelected(c);
+    const matched = CATEGORY_TEMPLATES.find((t) => t.name.toLowerCase() === (c.name || "").toLowerCase());
+    setSelectedTemplate(matched ? matched.name : "CUSTOM");
     setForm({
       name: c.name,
       price: c.price ?? 0,
@@ -95,6 +116,25 @@ export default function TicketCategoriesPage() {
       event_id: c.event_id ?? 0,
     });
     setModal("edit");
+  };
+
+  const handleTemplateChange = (value: string) => {
+    setSelectedTemplate(value);
+    if (value === "CUSTOM") {
+      if (modal === "create") {
+        setForm((f) => ({ ...f, name: "" }));
+      }
+      return;
+    }
+    const tpl = CATEGORY_TEMPLATES.find((t) => t.name === value);
+    if (tpl) {
+      setForm((f) => ({
+        ...f,
+        name: tpl.name,
+        price: modal === "create" && (!f.price || CATEGORY_TEMPLATES.some((x) => x.price === f.price)) ? tpl.price : f.price,
+        quota: modal === "create" && (!f.quota || CATEGORY_TEMPLATES.some((x) => x.quota === f.quota)) ? tpl.quota : f.quota,
+      }));
+    }
   };
 
   const openDelete = (c: TicketCategory) => {
@@ -386,6 +426,26 @@ export default function TicketCategoriesPage() {
         title={modal === "create" ? "Tambah Kategori Tiket" : "Edit Kategori Tiket"}
       >
         <form onSubmit={handleSave} className="flex flex-col gap-4">
+          <FormField label="Template Kategori Tiket">
+            <select
+              value={selectedTemplate}
+              onChange={(e) => handleTemplateChange(e.target.value)}
+              className="bg-zinc-950 border border-zinc-800 text-white text-xs px-3 py-2.5 rounded-md outline-none focus:border-red-600 transition cursor-pointer"
+            >
+              <option value="" disabled className="bg-zinc-900 text-zinc-400">
+                -- Pilih Template Kategori --
+              </option>
+              {CATEGORY_TEMPLATES.map((tpl) => (
+                <option key={tpl.name} value={tpl.name} className="bg-zinc-900 text-white">
+                  {tpl.label}
+                </option>
+              ))}
+              <option value="CUSTOM" className="bg-zinc-900 text-zinc-300">
+                Lainnya (Ketik Nama Kategori Manual)
+              </option>
+            </select>
+          </FormField>
+
           <FormField label="Nama Kategori">
             <div className="relative flex items-center">
               <span
@@ -395,8 +455,13 @@ export default function TicketCategoriesPage() {
               <Input
                 required
                 value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder="Contoh: VIP, CAT 1, Festival A"
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setForm((f) => ({ ...f, name: val }));
+                  const matched = CATEGORY_TEMPLATES.find((t) => t.name.toLowerCase() === val.toLowerCase());
+                  setSelectedTemplate(matched ? matched.name : "CUSTOM");
+                }}
+                placeholder="Pilih template di atas atau ketik manual..."
                 className="pl-8 w-full"
               />
             </div>

@@ -1,8 +1,112 @@
 "use client";
+/* eslint-disable @next/next/no-img-element */
 
 import Link from "next/link";
-import { useState, useEffect, useRef } from "react";
-import { eventApi, artistApi, orderApi, getImageUrl } from "@/lib/api";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { eventApi, artistApi, posterApi, promoApi, landingSettingsApi, getImageUrl } from "@/lib/api";
+
+// ── Types ──────────────────────────────────────────────────
+interface LandingSettings {
+  hero?: {
+    headline?: string;
+    subheadline?: string;
+    description?: string;
+    ctaText?: string;
+    ctaLink?: string;
+  };
+  capabilities?: { title: string; desc: string }[];
+  howItWorks?: { step: string; title: string; desc: string }[];
+  faqs?: { q: string; a: string }[];
+  cta?: {
+    title?: string;
+    description?: string;
+    btnPrimary?: string;
+    btnSecondary?: string;
+  };
+}
+interface EventItem {
+  id: number;
+  name: string;
+  venue?: string;
+  city?: string;
+  event_date?: string;
+  status?: string;
+  poster_url?: string;
+  lineup_poster_url?: string;
+  artists?: string;
+  min_price?: number | string;
+  tickets_sold?: number;
+}
+
+interface FestivalPoster {
+  id: number;
+  event_id?: number | null;
+  event_name?: string | null;
+  event_venue_db?: string | null;
+  event_date_db?: string | null;
+  min_price?: number | string | null;
+  title: string;
+  artists_lineup?: string | null;
+  venue?: string | null;
+  event_date?: string | null;
+  poster_url: string;
+  status: "ACTIVE" | "INACTIVE";
+}
+
+interface PromoItem {
+  id: number;
+  code: string;
+  description?: string;
+  discount_type: "percentage" | "fixed";
+  discount_value: number | string;
+  min_purchase?: number | string;
+  max_discount?: number | string;
+  quota?: number;
+  used_count?: number;
+  event_id?: number | null;
+  event_name?: string | null;
+  is_active?: number;
+}
+
+interface ArtistItem {
+  id: number;
+  name: string;
+  genre?: string;
+  photo_url?: string;
+}
+
+// ── Helpers ────────────────────────────────────────────────
+function formatDate(dateStr?: string | null) {
+  if (!dateStr) return "TBA";
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
+  } catch {
+    return dateStr;
+  }
+}
+
+function formatPrice(val?: number | string | null) {
+  if (!val) return "Coming Soon";
+  const n = Number(val);
+  if (isNaN(n) || n <= 0) return "Coming Soon";
+  return `Rp ${n.toLocaleString("id-ID")}`;
+}
+
+function hasValidPrice(val?: number | string | null) {
+  const n = Number(val);
+  return Boolean(val) && !isNaN(n) && n > 0;
+}
+
+function formatLocation(venue?: string | null, city?: string | null) {
+  const v = (venue || "").trim();
+  const c = (city || "").trim();
+  if (v && c) {
+    return v.toLowerCase().includes(c.toLowerCase()) ? v : `${v}, ${c}`;
+  }
+  return v || c || "Venue Segera Diumumkan";
+}
 
 // ── Logo ──────────────────────────────────────────────────
 function LouderLogo({ className = "" }: { className?: string }) {
@@ -98,7 +202,7 @@ function Navbar() {
     >
       <LouderLogo />
 
-      <div className="hidden md:flex items-center gap-8 text-sm text-zinc-400">
+      <div className="hidden lg:flex items-center gap-7 text-sm text-zinc-400">
         <a
           href="#capabilities"
           onClick={(e) => scrollToSection(e, "capabilities")}
@@ -108,11 +212,35 @@ function Navbar() {
           <span className="absolute -bottom-1 left-0 w-0 h-px bg-red-500 group-hover:w-full transition-all duration-300" />
         </a>
         <a
+          href="#posters"
+          onClick={(e) => scrollToSection(e, "posters")}
+          className="hover:text-white transition-colors relative group"
+        >
+          Posters
+          <span className="absolute -bottom-1 left-0 w-0 h-px bg-red-500 group-hover:w-full transition-all duration-300" />
+        </a>
+        <a
+          href="#promos"
+          onClick={(e) => scrollToSection(e, "promos")}
+          className="hover:text-white transition-colors relative group"
+        >
+          Discounts
+          <span className="absolute -bottom-1 left-0 w-0 h-px bg-red-500 group-hover:w-full transition-all duration-300" />
+        </a>
+        <a
           href="#live-events"
           onClick={(e) => scrollToSection(e, "live-events")}
           className="hover:text-white transition-colors relative group"
         >
           Featured Events
+          <span className="absolute -bottom-1 left-0 w-0 h-px bg-red-500 group-hover:w-full transition-all duration-300" />
+        </a>
+        <a
+          href="#artists"
+          onClick={(e) => scrollToSection(e, "artists")}
+          className="hover:text-white transition-colors relative group"
+        >
+          Line-Up
           <span className="absolute -bottom-1 left-0 w-0 h-px bg-red-500 group-hover:w-full transition-all duration-300" />
         </a>
         <a
@@ -133,7 +261,6 @@ function Navbar() {
         </a>
       </div>
 
-      {/* Login button — clean pill style */}
       <Link
         href="/login"
         className="flex items-center gap-2 px-4 py-2 rounded-full bg-zinc-800 hover:bg-red-700 text-zinc-300 hover:text-white text-sm font-medium transition-all duration-200 border border-zinc-700 hover:border-red-600"
@@ -191,9 +318,13 @@ function StatCard({
 }
 
 // ── Hero Visual (right side) ──────────────────────────────
-function HeroVisual() {
-  const [stats, setStats] = useState({ events: "60+", orders: "100.000+", artists: "100+" });
-
+function HeroVisual({
+  eventsCount = 5,
+  artistsCount = 7,
+}: {
+  eventsCount?: number;
+  artistsCount?: number;
+}) {
   return (
     <div className="relative flex items-center justify-center w-full h-72">
       {/* rings */}
@@ -213,11 +344,10 @@ function HeroVisual() {
       </div>
 
       {/* Cards — orbit close around center */}
-      {/* Events Live — top-left */}
       <div className="absolute" style={{ top: "20px", left: "40px" }}>
         <StatCard
           label="Konser Tersedia"
-          value={stats.events}
+          value={`${eventsCount}+`}
           labelColor="text-blue-400"
           glowColor="rgba(59,130,246,0.25)"
           borderHover="hover:border-blue-500/60"
@@ -225,11 +355,10 @@ function HeroVisual() {
         />
       </div>
 
-      {/* Orders — right */}
       <div className="absolute" style={{ top: "60px", right: "30px" }}>
         <StatCard
           label="Tiket Terjual"
-          value={stats.orders}
+          value="100.000+"
           labelColor="text-red-400"
           glowColor="rgba(185,28,28,0.4)"
           borderHover="hover:border-red-600/70"
@@ -237,11 +366,10 @@ function HeroVisual() {
         />
       </div>
 
-      {/* Artists — bottom */}
       <div className="absolute" style={{ bottom: "16px", left: "80px" }}>
         <StatCard
           label="Artist"
-          value={stats.artists}
+          value={`${artistsCount}+`}
           labelColor="text-blue-400"
           glowColor="rgba(59,130,246,0.2)"
           borderHover="hover:border-blue-500/60"
@@ -253,13 +381,29 @@ function HeroVisual() {
 }
 
 // ── Hero ──────────────────────────────────────────────────
-function HeroSection() {
+function HeroSection({
+  eventsCount,
+  artistsCount,
+  hero,
+}: {
+  eventsCount: number;
+  artistsCount: number;
+  hero?: LandingSettings["hero"];
+}) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setVisible(true), 100);
     return () => clearTimeout(t);
   }, []);
+
+  const headline = hero?.headline || "Rasakan Energi Panggung.";
+  const subheadline = hero?.subheadline || "Amankan Tiket Konsermu.";
+  const description =
+    hero?.description ||
+    "Platform resmi pemesanan tiket konser musik terpercaya. Dapatkan akses presale, pilih kategori terbaik, dan saksikan konser spektakuler musisi impianmu.";
+  const ctaText = hero?.ctaText || "Daftar Sekarang →";
+  const ctaLink = hero?.ctaLink || "/register";
 
   return (
     <section
@@ -271,20 +415,17 @@ function HeroSection() {
     >
       <AnimatedBackground />
 
-      {/* NO dashed blue border */}
-
       <div
         className={`relative z-10 w-full max-w-6xl mx-auto px-8 py-32 grid grid-cols-1 lg:grid-cols-2 gap-16 items-center transition-all duration-700 ${
           visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"
         }`}
       >
-        {/* Left */}
         <div className="flex flex-col gap-7">
           <LouderLogo />
 
           <div>
             <h1 className="text-5xl md:text-6xl font-extrabold text-white leading-tight tracking-tight">
-              Rasakan Energi Panggung.
+              {headline}
             </h1>
             <h1
               className="text-5xl md:text-6xl font-extrabold leading-tight tracking-tight"
@@ -294,21 +435,20 @@ function HeroSection() {
                 WebkitTextFillColor: "transparent",
               }}
             >
-              Amankan Tiket Konsermu.
+              {subheadline}
             </h1>
           </div>
 
           <p className="text-zinc-400 text-sm leading-relaxed max-w-sm">
-            Platform resmi pemesanan tiket konser musik terpercaya. Dapatkan akses presale,
-            pilih kategori terbaik, dan saksikan konser spektakuler musisi impianmu.
+            {description}
           </p>
 
           <div className="flex items-center gap-4">
             <Link
-              href="/register"
+              href={ctaLink}
               className="group inline-flex items-center gap-2 px-6 py-3 bg-red-700 hover:bg-red-600 text-white text-xs font-bold uppercase tracking-widest transition-all duration-200 relative overflow-hidden"
             >
-              <span className="relative z-10">Daftar Sekarang →</span>
+              <span className="relative z-10">{ctaText}</span>
               <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-500 bg-gradient-to-r from-transparent via-white/10 to-transparent" />
             </Link>
             <a
@@ -320,13 +460,12 @@ function HeroSection() {
           </div>
         </div>
 
-        {/* Right — Visual */}
         <div
           className={`transition-all duration-700 delay-200 ${
             visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
           }`}
         >
-          <HeroVisual />
+          <HeroVisual eventsCount={eventsCount} artistsCount={artistsCount} />
         </div>
       </div>
     </section>
@@ -356,14 +495,10 @@ function SponsorsMarqueeSection() {
         </p>
       </div>
 
-      {/* Marquee Track with Edge Fade Masks */}
       <div className="relative w-full overflow-hidden">
-        {/* Left Fade Mask */}
         <div className="pointer-events-none absolute inset-y-0 left-0 w-28 sm:w-56 bg-gradient-to-r from-black via-black/90 to-transparent z-10" />
-        {/* Right Fade Mask */}
         <div className="pointer-events-none absolute inset-y-0 right-0 w-28 sm:w-56 bg-gradient-to-l from-black via-black/90 to-transparent z-10" />
 
-        {/* Pure Official Brand Logos Infinite Row */}
         <div className="animate-marquee flex items-center gap-16 sm:gap-24 md:gap-28 py-4">
           {marqueeItems.map((sponsor, idx) => (
             <div
@@ -472,7 +607,13 @@ const capabilities = [
   },
 ];
 
-function CapabilitiesSection() {
+function CapabilitiesSection({
+  items,
+}: {
+  items?: LandingSettings["capabilities"];
+}) {
+  const list = items && items.length > 0 ? items : capabilities;
+
   return (
     <section
       id="capabilities"
@@ -492,8 +633,14 @@ function CapabilitiesSection() {
           <p className="text-zinc-500 text-sm mt-2">Standar pengalaman ticketing konser terdepan dan bebas calo</p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {capabilities.map((cap, i) => (
-            <CapabilityCard key={cap.title} {...cap} delay={i * 120} />
+          {list.map((cap, i) => (
+            <CapabilityCard
+              key={cap.title + i}
+              icon={capabilities[i % capabilities.length].icon}
+              title={cap.title}
+              desc={cap.desc}
+              delay={i * 120}
+            />
           ))}
         </div>
       </div>
@@ -501,128 +648,460 @@ function CapabilitiesSection() {
   );
 }
 
-// ── Featured Events Showcase ──────────────────────────────
-function FeaturedEventsSection() {
-  const [events, setEvents] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [activeIdx, setActiveIdx] = useState<number | null>(null);
-
-  useEffect(() => {
-    eventApi.getAll().then((res) => {
-      if (res.ok) {
-        const list = Array.isArray(res.data) ? res.data : res.data?.data ?? [];
-        const published = list.filter((e: any) => {
-          const st = (e.status || "").toLowerCase();
-          return st === "published" || st === "active";
-        });
-        setEvents(published.slice(0, 3));
-      }
-      setLoading(false);
-    });
-  }, []);
-
-  const formatDate = (dateStr?: string) => {
-    if (!dateStr) return "TBA";
-    try {
-      const d = new Date(dateStr);
-      return d.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
-    } catch {
-      return dateStr;
-    }
-  };
+// ── SECTION: Festival Posters & Official Pamphlet Showcase (NEW) ──
+function FestivalPostersSection({
+  posters,
+  onOpenLightbox,
+}: {
+  posters: FestivalPoster[];
+  onOpenLightbox: (poster: FestivalPoster) => void;
+}) {
+  const activePosters = useMemo(() => {
+    return posters.filter((p) => p.status === "ACTIVE" || !p.status);
+  }, [posters]);
 
   return (
-    <section id="live-events" className="relative py-24 px-8 bg-zinc-950 border-t border-zinc-900 overflow-hidden">
+    <section id="posters" className="relative py-24 px-8 bg-black border-t border-zinc-900 overflow-hidden">
       <div className="max-w-6xl mx-auto relative z-10">
         <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-4">
           <div>
-            <p className="text-red-500 text-xs uppercase tracking-[0.3em] font-semibold mb-2">Live Experiences</p>
-            <h2 className="text-white text-3xl md:text-4xl font-bold tracking-tight">Konser Terkini di Database</h2>
+            <p className="text-red-500 text-xs uppercase tracking-[0.3em] font-semibold mb-2">
+              Official Festival Line-Up
+            </p>
+            <h2 className="text-white text-3xl md:text-4xl font-bold tracking-tight">
+              Poster & Pamflet Festival
+            </h2>
+            <p className="text-zinc-500 text-sm mt-2">
+              Susunan musisi dan pamflet promosi resmi kurasi festival panggung LOUDER
+            </p>
           </div>
-          <Link
-            href="/login"
-            className="text-xs uppercase tracking-widest text-zinc-400 hover:text-red-400 flex items-center gap-1.5 group transition-colors"
-          >
-            Akses Panel Promotor <span className="group-hover:translate-x-1 transition-transform">→</span>
-          </Link>
         </div>
 
-        {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <div className="w-8 h-8 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : events.length === 0 ? (
+        {activePosters.length === 0 ? (
           <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-10 text-center">
-            <p className="text-zinc-400 text-sm">Belum ada konser aktif yang dipublikasikan di database.</p>
-            <p className="text-zinc-600 text-xs mt-1">Tambahkan konser baru melalui panel admin promotor.</p>
+            <p className="text-zinc-400 text-sm">Belum ada pamflet festival aktif yang dipublikasikan.</p>
+            <p className="text-zinc-600 text-xs mt-1">Nantikan pembaruan susunan panggung berikutnya.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {events.map((ev, i) => {
-              const poster = getImageUrl(ev.poster_url);
-              const priceText =
-                ev.min_price && Number(ev.min_price) > 0
-                  ? `Rp ${Number(ev.min_price).toLocaleString("id-ID")}`
-                  : "Cek Kuota";
-
+            {activePosters.map((poster) => {
+              const imgUrl = getImageUrl(poster.poster_url);
               return (
                 <div
-                  key={ev.id}
-                  onMouseEnter={() => setActiveIdx(i)}
-                  onMouseLeave={() => setActiveIdx(null)}
-                  className={`relative bg-zinc-900/80 border border-zinc-800 rounded-2xl overflow-hidden flex flex-col justify-between transition-all duration-300 ${
-                    activeIdx === i
-                      ? "border-red-600/70 shadow-xl shadow-red-950/40 -translate-y-1.5"
-                      : "hover:border-zinc-700"
-                  }`}
+                  key={poster.id}
+                  onClick={() => onOpenLightbox(poster)}
+                  className="group relative bg-zinc-900/80 border border-zinc-800 rounded-2xl overflow-hidden flex flex-col justify-between transition-all duration-300 hover:border-red-600/70 hover:shadow-xl hover:shadow-red-950/40 hover:-translate-y-1.5 cursor-pointer"
                 >
-                  {poster && (
-                    <div className="w-full h-44 overflow-hidden relative bg-zinc-800">
+                  {/* Poster Image Frame */}
+                  <div className="w-full h-64 overflow-hidden relative bg-zinc-800">
+                    {imgUrl ? (
                       <img
-                        src={poster}
-                        alt={ev.name}
-                        className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
+                        src={imgUrl}
+                        alt={poster.title}
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                       />
-                      <div className="absolute inset-0 bg-gradient-to-t from-zinc-900 via-zinc-900/40 to-transparent" />
-                    </div>
-                  )}
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-zinc-900 text-zinc-600">
+                        <LouderLogo className="opacity-30" />
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-zinc-900 via-zinc-900/30 to-transparent" />
+                    <span className="absolute top-3 left-3 text-[10px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded-full border bg-black/60 backdrop-blur-sm text-red-400 border-red-500/30">
+                      LINE-UP RESMI
+                    </span>
+                  </div>
 
                   <div className="p-6 flex-1 flex flex-col justify-between">
                     <div>
-                      <div className="flex items-center justify-between gap-2 mb-3">
-                        <span className="text-[10px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded-full border bg-red-500/20 text-red-400 border-red-500/30">
-                          {ev.tickets_sold > 0 ? "Tiket Terjual" : "Published"}
-                        </span>
-                        <span className="text-xs font-mono text-zinc-400">{formatDate(ev.event_date)}</span>
+                      <div className="flex items-center justify-between text-xs font-mono text-zinc-400 mb-2">
+                        <span>{formatDate(poster.event_date || poster.event_date_db)}</span>
+                        {poster.event_name && (
+                          <span className="text-[10px] text-zinc-500 truncate max-w-[120px]">
+                            {poster.event_name}
+                          </span>
+                        )}
                       </div>
-                      <h3 className="text-white text-xl font-bold mb-2 group-hover:text-red-400 transition-colors">
-                        {ev.name}
+                      <h3 className="text-white text-lg font-bold mb-2 group-hover:text-red-400 transition-colors line-clamp-1">
+                        {poster.title}
                       </h3>
-                      <p className="text-red-400/90 text-xs font-medium mb-3">
-                        {ev.artists || "Musisi Panggung"}
-                      </p>
-                      <div className="flex items-center gap-2 text-zinc-400 text-xs mb-4">
+                      {poster.artists_lineup && (
+                        <p className="text-zinc-400 text-xs leading-relaxed line-clamp-2 mb-3">
+                          {poster.artists_lineup}
+                        </p>
+                      )}
+                      <div className="flex items-center gap-2 text-zinc-400 text-xs">
                         <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                         </svg>
-                        <span>{ev.venue || "Venue Panggung"}</span>
+                        <span className="truncate">{poster.venue || poster.event_venue_db || "Venue Panggung"}</span>
                       </div>
                     </div>
 
-                    <div className="pt-4 border-t border-zinc-800/80 flex items-center justify-between">
+                    <div className="pt-4 mt-4 border-t border-zinc-800/80 flex items-center justify-between">
                       <div>
-                        <p className="text-[10px] uppercase tracking-wider text-zinc-500">Mulai dari</p>
-                        <p className="text-white font-mono font-bold text-base">{priceText}</p>
+                        <p className="text-[10px] uppercase tracking-wider text-zinc-500">
+                          {hasValidPrice(poster.min_price) ? "Mulai dari" : "Harga Tiket"}
+                        </p>
+                        <p
+                          className={`font-mono font-bold text-base ${
+                            hasValidPrice(poster.min_price) ? "text-white" : "text-amber-400"
+                          }`}
+                        >
+                          {formatPrice(poster.min_price)}
+                        </p>
                       </div>
-                      <Link
-                        href="/login"
-                        className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-red-600 text-zinc-200 hover:text-white text-xs font-semibold uppercase tracking-wider transition-all duration-200"
-                      >
-                        Detail Event
-                      </Link>
+                      <span className="px-3 py-1.5 rounded-xl bg-zinc-800 group-hover:bg-red-600 text-zinc-200 group-hover:text-white text-xs font-semibold uppercase tracking-wider transition-all duration-200">
+                        Perbesar ↗
+                      </span>
                     </div>
                   </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+// ── SECTION: Exclusive Promos & Discount Vouchers (NEW) ───
+function PromosSection({
+  promos,
+  onCopy,
+  copiedCode,
+}: {
+  promos: PromoItem[];
+  onCopy: (code: string) => void;
+  copiedCode: string | null;
+}) {
+  const activePromos = useMemo(() => {
+    return promos.filter((p) => (p.is_active ?? 1) === 1);
+  }, [promos]);
+
+  return (
+    <section id="promos" className="relative py-24 px-8 bg-zinc-950 border-t border-zinc-900 overflow-hidden">
+      <div className="max-w-6xl mx-auto relative z-10">
+        <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-4">
+          <div>
+            <p className="text-red-500 text-xs uppercase tracking-[0.3em] font-semibold mb-2">
+              Exclusive Vouchers
+            </p>
+            <h2 className="text-white text-3xl md:text-4xl font-bold tracking-tight">
+              Kupon & Promo Diskon
+            </h2>
+            <p className="text-zinc-500 text-sm mt-2">
+              Salin kode kupon promosi aktif dan gunakan saat memesan tiket di platform LOUDER
+            </p>
+          </div>
+        </div>
+
+        {activePromos.length === 0 ? (
+          <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-10 text-center">
+            <p className="text-zinc-400 text-sm">Belum ada kupon diskon aktif yang dipublikasikan.</p>
+            <p className="text-zinc-600 text-xs mt-1">Nantikan rilis penawaran kupon periode berikutnya.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {activePromos.map((promo) => {
+              const isCopied = copiedCode === promo.code;
+              const discountLabel =
+                promo.discount_type === "percentage"
+                  ? `${promo.discount_value}% OFF`
+                  : `POTONGAN ${formatPrice(promo.discount_value)}`;
+
+              return (
+                <div
+                  key={promo.id}
+                  className="relative bg-zinc-900/80 border border-zinc-800 hover:border-red-600/70 rounded-2xl p-6 flex flex-col justify-between transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-red-950/40 group"
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded-full border bg-red-500/15 text-red-400 border-red-500/30 font-mono">
+                        {promo.discount_type === "percentage" ? "Persentase" : "Nominal"}
+                      </span>
+                      {promo.quota && (
+                        <span className="text-[11px] font-mono text-zinc-500">
+                          Sisa: {Math.max(0, promo.quota - (promo.used_count || 0))} Kuota
+                        </span>
+                      )}
+                    </div>
+
+                    <h3 className="text-white text-2xl font-black font-mono tracking-tight group-hover:text-red-400 transition-colors">
+                      {discountLabel}
+                    </h3>
+                    <p className="text-zinc-300 text-xs mt-1 font-medium">
+                      {promo.description || "Diskon tiket konser LOUDER"}
+                    </p>
+
+                    {promo.event_name && (
+                      <p className="text-[11px] text-red-400/90 font-mono mt-2">
+                        Event: {promo.event_name}
+                      </p>
+                    )}
+
+                    <div className="mt-4 pt-3 border-t border-zinc-800/80 space-y-1 text-[11px] font-mono text-zinc-500">
+                      {Number(promo.min_purchase) > 0 && (
+                        <p>Min. Transaksi: {formatPrice(promo.min_purchase)}</p>
+                      )}
+                      {Number(promo.max_discount) > 0 && promo.discount_type === "percentage" && (
+                        <p>Maks. Diskon: {formatPrice(promo.max_discount)}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-6 pt-4 border-t border-zinc-800 flex items-center justify-between gap-3">
+                    <div className="bg-zinc-950 border border-zinc-800 px-3 py-1.5 rounded-lg font-mono font-bold text-xs tracking-wider text-red-400 select-all flex-1 text-center">
+                      {promo.code}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onCopy(promo.code)}
+                      className={`px-4 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+                        isCopied
+                          ? "bg-emerald-600 text-white"
+                          : "bg-zinc-800 hover:bg-red-600 text-zinc-200 hover:text-white"
+                      }`}
+                    >
+                      {isCopied ? "Disalin ✓" : "Salin"}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+// ── Featured Events Showcase (Segera Diselenggarakan & Upcoming Announcement) ─
+function FeaturedEventsSection({ events }: { events: EventItem[] }) {
+  const [activeIdx, setActiveIdx] = useState<number | null>(null);
+
+  const published = useMemo(() => {
+    return events.filter((e) => {
+      const st = (e.status || "").toLowerCase();
+      return st === "published" || st === "active";
+    });
+  }, [events]);
+
+  const sellingEvents = useMemo(
+    () => published.filter((e) => hasValidPrice(e.min_price)),
+    [published]
+  );
+
+  const upcomingAnnouncements = useMemo(
+    () => published.filter((e) => !hasValidPrice(e.min_price)),
+    [published]
+  );
+
+  return (
+    <section id="live-events" className="relative py-24 px-8 bg-zinc-950 border-t border-zinc-900 overflow-hidden">
+      <div className="max-w-6xl mx-auto relative z-10 space-y-20">
+        {/* ── 1. Konser Segera Diselenggarakan (Tiket Tersedia) ── */}
+        <div>
+          <div className="flex flex-col md:flex-row md:items-end justify-between mb-10 gap-4">
+            <div>
+              <p className="text-red-500 text-xs uppercase tracking-[0.3em] font-semibold mb-2">Now Selling</p>
+              <h2 className="text-white text-3xl md:text-4xl font-bold tracking-tight">Konser Segera Diselenggarakan</h2>
+              <p className="text-zinc-400 text-xs mt-1.5">Tiket resmi sudah tersedia dan dapat langsung dipesan.</p>
+            </div>
+            <Link
+              href="/events"
+              className="text-xs uppercase tracking-widest text-zinc-400 hover:text-red-400 flex items-center gap-1.5 group transition-colors"
+            >
+              Lihat Semua Jadwal <span className="group-hover:translate-x-1 transition-transform">→</span>
+            </Link>
+          </div>
+
+          {sellingEvents.length === 0 ? (
+            <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-10 text-center">
+              <p className="text-zinc-400 text-sm">Belum ada konser yang membuka penjualan tiket saat ini.</p>
+              <p className="text-zinc-600 text-xs mt-1">Lihat pengumuman konser Upcoming di bawah.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {sellingEvents.map((ev, i) => {
+                const poster = getImageUrl(ev.poster_url);
+                const priceText = `Rp ${Number(ev.min_price).toLocaleString("id-ID")}`;
+
+                return (
+                  <div
+                    key={ev.id}
+                    onMouseEnter={() => setActiveIdx(i)}
+                    onMouseLeave={() => setActiveIdx(null)}
+                    className={`relative bg-zinc-900/80 border border-zinc-800 rounded-2xl overflow-hidden flex flex-col justify-between transition-all duration-300 ${
+                      activeIdx === i
+                        ? "border-red-600/70 shadow-xl shadow-red-950/40 -translate-y-1.5"
+                        : "hover:border-zinc-700"
+                    }`}
+                  >
+                    {poster && (
+                      <div className="w-full h-44 overflow-hidden relative bg-zinc-800">
+                        <img
+                          src={poster}
+                          alt={ev.name}
+                          className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-zinc-900 via-zinc-900/40 to-transparent" />
+                      </div>
+                    )}
+
+                    <div className="p-6 flex-1 flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center justify-between gap-2 mb-3">
+                          <span className="text-[10px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded-full border bg-emerald-500/15 text-emerald-400 border-emerald-500/30">
+                            Tiket Tersedia
+                          </span>
+                          <span className="text-xs font-mono text-zinc-400">{formatDate(ev.event_date)}</span>
+                        </div>
+                        <h3 className="text-white text-xl font-bold mb-2 group-hover:text-red-400 transition-colors">
+                          {ev.name}
+                        </h3>
+                        <p className="text-red-400/90 text-xs font-medium mb-3">
+                          {ev.artists || "Musisi Panggung"}
+                        </p>
+                        <div className="flex items-center gap-2 text-zinc-400 text-xs mb-4">
+                          <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                          <span>{formatLocation(ev.venue, ev.city)}</span>
+                        </div>
+                      </div>
+
+                      <div className="pt-4 border-t border-zinc-800/80 flex items-center justify-between">
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wider text-zinc-500">Mulai dari</p>
+                          <p className="font-mono font-bold text-base text-white">{priceText}</p>
+                        </div>
+                        <Link
+                          href={`/events/${ev.id}`}
+                          className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-red-600 text-zinc-200 hover:text-white text-xs font-semibold uppercase tracking-wider transition-all duration-200"
+                        >
+                          Pesan Tiket
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* ── 2. Upcoming Concerts (Announcement Only — Belum Ada Tiket) ── */}
+        {upcomingAnnouncements.length > 0 && (
+          <div id="upcoming-concerts" className="pt-12 border-t border-zinc-900">
+            <div className="mb-10">
+              <p className="text-amber-400 text-xs uppercase tracking-[0.3em] font-semibold mb-2">Announcement</p>
+              <h2 className="text-white text-3xl md:text-4xl font-bold tracking-tight">Upcoming Concerts</h2>
+              <p className="text-zinc-400 text-xs mt-1.5">
+                Pengumuman konser mendatang — pantau pamflet & jadwal sebelum penjualan tiket resmi dibuka.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {upcomingAnnouncements.map((ev) => {
+                const poster = getImageUrl(ev.lineup_poster_url || ev.poster_url);
+                return (
+                  <div
+                    key={ev.id}
+                    className="relative bg-zinc-900/60 border border-zinc-800 rounded-2xl overflow-hidden flex flex-col justify-between"
+                  >
+                    {poster && (
+                      <div className="w-full h-52 overflow-hidden relative bg-zinc-900">
+                        <img
+                          src={poster}
+                          alt={ev.name}
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/30 to-transparent" />
+                        <span className="absolute top-3 left-3 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 backdrop-blur-sm">
+                          Coming Soon
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="p-5 flex-1 flex flex-col justify-between">
+                      <div>
+                        <p className="text-xs font-mono text-zinc-400 mb-1.5">{formatDate(ev.event_date)}</p>
+                        <h3 className="text-white text-lg font-bold mb-1.5">{ev.name}</h3>
+                        <p className="text-zinc-300 text-xs font-medium mb-3">
+                          {ev.artists || "Line-up Segera Diumumkan"}
+                        </p>
+                        <div className="flex items-center gap-2 text-zinc-400 text-xs mb-4">
+                          <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                          <span>{formatLocation(ev.venue, ev.city)}</span>
+                        </div>
+                      </div>
+
+                      <div className="pt-3.5 border-t border-zinc-800/80 flex items-center justify-between">
+                        <span className="text-amber-400 font-mono font-bold text-xs uppercase tracking-wider">
+                          Coming Soon
+                        </span>
+                        <span className="text-zinc-500 text-[11px]">Tiket belum dibuka</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+// ── SECTION: Featured Musicians & Line-Up Roster (NEW) ────
+function ArtistsSection({ artists }: { artists: ArtistItem[] }) {
+  return (
+    <section id="artists" className="relative py-24 px-8 bg-black border-t border-zinc-900 overflow-hidden">
+      <div className="max-w-6xl mx-auto relative z-10">
+        <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-4">
+          <div>
+            <p className="text-red-500 text-xs uppercase tracking-[0.3em] font-semibold mb-2">Stage Line-Up</p>
+            <h2 className="text-white text-3xl md:text-4xl font-bold tracking-tight">Musisi & Roster Panggung</h2>
+            <p className="text-zinc-500 text-sm mt-2">Deretan musisi dan pengisi festival resmi panggung LOUDER 2026</p>
+          </div>
+        </div>
+
+        {artists.length === 0 ? (
+          <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-10 text-center">
+            <p className="text-zinc-400 text-sm">Belum ada musisi yang terdaftar.</p>
+            <p className="text-zinc-600 text-xs mt-1">Line-up musisi berikutnya akan segera diumumkan.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            {artists.map((artist) => {
+              const photo = getImageUrl(artist.photo_url);
+              return (
+                <div
+                  key={artist.id}
+                  className="bg-zinc-900/60 border border-zinc-800 hover:border-red-600/60 rounded-2xl p-5 flex flex-col items-center text-center transition-all duration-300 hover:-translate-y-1 group"
+                >
+                  <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-zinc-700 group-hover:border-red-500 transition-colors mb-3.5 bg-zinc-800 flex items-center justify-center">
+                    {photo ? (
+                      <img src={photo} alt={artist.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                    ) : (
+                      <span className="text-red-400 font-bold text-sm">
+                        {artist.name.slice(0, 2).toUpperCase()}
+                      </span>
+                    )}
+                  </div>
+                  <h4 className="text-white text-sm font-bold group-hover:text-red-400 transition-colors line-clamp-1">
+                    {artist.name}
+                  </h4>
+                  <p className="text-zinc-500 text-xs font-mono uppercase mt-1">
+                    {artist.genre || "Musisi Panggung"}
+                  </p>
                 </div>
               );
             })}
@@ -652,7 +1131,13 @@ const steps = [
   },
 ];
 
-function HowItWorksSection() {
+function HowItWorksSection({
+  items,
+}: {
+  items?: LandingSettings["howItWorks"];
+}) {
+  const list = items && items.length > 0 ? items : steps;
+
   return (
     <section id="how-it-works" className="relative py-24 px-8 bg-black border-t border-zinc-900 overflow-hidden">
       <div className="max-w-6xl mx-auto relative z-10">
@@ -663,7 +1148,7 @@ function HowItWorksSection() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {steps.map((st) => (
+          {list.map((st) => (
             <div
               key={st.step}
               className="relative p-8 rounded-2xl bg-gradient-to-b from-zinc-900 to-zinc-950 border border-zinc-800 hover:border-red-900/60 transition-all duration-300 group"
@@ -692,6 +1177,10 @@ const faqs = [
     a: "QR code tiket bersifat unik dan hanya berlaku untuk satu kali scan di gerbang masuk gate validator.",
   },
   {
+    q: "Bagaimana cara menggunakan voucher promo diskon?",
+    a: "Salin kode yang tersedia di bagian kupon promo, lalu masukkan kode tersebut pada kolom voucher saat melakukan checkout tiket konser.",
+  },
+  {
     q: "Metode pembayaran apa saja yang didukung?",
     a: "LOUDER mendukung pembayaran instan via QRIS semua e-wallet, Virtual Account / Transfer Bank, dan Kartu Debit/Kredit.",
   },
@@ -701,8 +1190,13 @@ const faqs = [
   },
 ];
 
-function FAQSection() {
+function FAQSection({
+  items,
+}: {
+  items?: LandingSettings["faqs"];
+}) {
   const [openIdx, setOpenIdx] = useState<number | null>(0);
+  const list = items && items.length > 0 ? items : faqs;
 
   return (
     <section id="faq" className="relative py-24 px-8 bg-zinc-950 border-t border-zinc-900">
@@ -714,11 +1208,11 @@ function FAQSection() {
         </div>
 
         <div className="flex flex-col gap-4">
-          {faqs.map((faq, i) => {
+          {list.map((faq, i) => {
             const isOpen = openIdx === i;
             return (
               <div
-                key={faq.q}
+                key={faq.q + i}
                 className="border border-zinc-800 bg-zinc-900/60 rounded-xl overflow-hidden transition-colors hover:border-zinc-700"
               >
                 <button
@@ -745,16 +1239,27 @@ function FAQSection() {
 }
 
 // ── CTA Banner ────────────────────────────────────────────
-function CTABanner() {
+function CTABanner({
+  cta,
+}: {
+  cta?: LandingSettings["cta"];
+}) {
+  const title = cta?.title || "Siap Rasakan Gemuruh Panggung?";
+  const description =
+    cta?.description ||
+    "Daftar sekarang untuk mendapatkan akses lebih awal (early bird) dan notifikasi tiket konser terpanas di kotamu.";
+  const btnPrimary = cta?.btnPrimary || "Create Account";
+  const btnSecondary = cta?.btnSecondary || "Sign In";
+
   return (
     <section className="relative py-20 px-8 bg-black border-t border-zinc-900 overflow-hidden">
       <div className="max-w-5xl mx-auto relative rounded-3xl p-10 md:p-14 bg-gradient-to-r from-red-950/60 via-zinc-900 to-black border border-red-800/40 shadow-2xl flex flex-col md:flex-row items-center justify-between gap-8">
         <div className="max-w-xl">
           <h2 className="text-3xl md:text-4xl font-extrabold text-white tracking-tight mb-3">
-            Siap Rasakan Gemuruh Panggung?
+            {title}
           </h2>
           <p className="text-zinc-300 text-sm leading-relaxed">
-            Daftar sekarang untuk mendapatkan akses lebih awal (early bird) dan notifikasi tiket konser terpanas di kotamu.
+            {description}
           </p>
         </div>
         <div className="flex items-center gap-4 shrink-0">
@@ -762,13 +1267,13 @@ function CTABanner() {
             href="/register"
             className="px-6 py-3.5 rounded-full bg-red-600 hover:bg-red-500 text-white text-xs font-bold uppercase tracking-widest transition-all duration-200 shadow-lg shadow-red-700/30"
           >
-            Create Account
+            {btnPrimary}
           </Link>
           <Link
             href="/login"
             className="px-6 py-3.5 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-bold uppercase tracking-widest transition-all duration-200"
           >
-            Sign In
+            {btnSecondary}
           </Link>
         </div>
       </div>
@@ -839,6 +1344,88 @@ function Footer() {
   );
 }
 
+// ── Lightbox Modal for Full Poster ─────────────────────────
+function PosterLightboxModal({
+  poster,
+  onClose,
+}: {
+  poster: FestivalPoster | null;
+  onClose: () => void;
+}) {
+  if (!poster) return null;
+
+  return (
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-6"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="relative max-w-2xl w-full bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col md:flex-row"
+      >
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 z-20 w-8 h-8 rounded-full bg-black/80 hover:bg-red-600 text-white flex items-center justify-center transition-colors text-xs font-bold"
+        >
+          ✕
+        </button>
+
+        <div className="md:w-1/2 bg-zinc-950 p-4 flex items-center justify-center">
+          <img
+            src={getImageUrl(poster.poster_url)}
+            alt={poster.title}
+            className="w-full max-h-[460px] object-contain rounded-xl"
+          />
+        </div>
+
+        <div className="md:w-1/2 p-6 flex flex-col justify-between">
+          <div>
+            <span className="text-[10px] font-mono uppercase tracking-wider text-red-400 font-semibold">
+              Official Pamphlet
+            </span>
+            <h3 className="text-white text-xl font-bold mt-1 mb-3">
+              {poster.title}
+            </h3>
+            {poster.artists_lineup && (
+              <p className="text-zinc-400 text-xs leading-relaxed mb-4">
+                <strong className="text-zinc-300">Lineup:</strong> {poster.artists_lineup}
+              </p>
+            )}
+            <div className="space-y-2 text-xs font-mono text-zinc-400 pt-3 border-t border-zinc-800">
+              <p>Tanggal: {formatDate(poster.event_date || poster.event_date_db)}</p>
+              <p>Venue: {poster.venue || poster.event_venue_db || "TBA"}</p>
+              <p className={hasValidPrice(poster.min_price) ? "text-white font-bold" : "text-amber-400 font-bold"}>
+                {hasValidPrice(poster.min_price)
+                  ? `Mulai: ${formatPrice(poster.min_price)}`
+                  : "Harga Tiket: Coming Soon"}
+              </p>
+            </div>
+          </div>
+
+          <div className="pt-6">
+            {poster.event_id ? (
+              <Link
+                href={`/events/${poster.event_id}`}
+                className="block text-center w-full py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-semibold uppercase tracking-wider transition-colors"
+              >
+                Pesan Tiket Acara Ini →
+              </Link>
+            ) : (
+              <a
+                href="#live-events"
+                onClick={onClose}
+                className="block text-center w-full py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-semibold uppercase tracking-wider transition-colors"
+              >
+                Lihat Jadwal Tiket →
+              </a>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Global styles ─────────────────────────────────────────
 const globalStyles = `
   @keyframes float {
@@ -869,19 +1456,101 @@ const globalStyles = `
 
 // ── Page ──────────────────────────────────────────────────
 export default function LandingPage() {
+  const [events, setEvents] = useState<EventItem[]>([]);
+  const [artists, setArtists] = useState<ArtistItem[]>([]);
+  const [posters, setPosters] = useState<FestivalPoster[]>([]);
+  const [promos, setPromos] = useState<PromoItem[]>([]);
+  const [settings, setSettings] = useState<LandingSettings | null>(null);
+  const [lightboxPoster, setLightboxPoster] = useState<FestivalPoster | null>(null);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const fetchAll = () => {
+      Promise.all([
+        eventApi.getAll(),
+        artistApi.getAll(),
+        posterApi.getAll(),
+        promoApi.getAll(),
+        landingSettingsApi.get(),
+      ]).then(([eRes, aRes, pRes, prRes, sRes]) => {
+        if (!active) return;
+        if (eRes.ok) {
+          const list = Array.isArray(eRes.data) ? eRes.data : eRes.data?.data ?? [];
+          setEvents(list);
+        }
+        if (aRes.ok) {
+          const list = Array.isArray(aRes.data) ? aRes.data : aRes.data?.data ?? [];
+          setArtists(list);
+        }
+        if (pRes.ok) {
+          const list = Array.isArray(pRes.data) ? pRes.data : pRes.data?.data ?? [];
+          setPosters(list);
+        }
+        if (prRes.ok) {
+          const list = Array.isArray(prRes.data) ? prRes.data : prRes.data?.data ?? [];
+          setPromos(list);
+        }
+        if (sRes.ok && sRes.data) {
+          setSettings(sRes.data);
+        }
+      });
+    };
+
+    fetchAll();
+    const onFocus = () => fetchAll();
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") fetchAll();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    const timer = setInterval(fetchAll, 15000);
+
+    return () => {
+      active = false;
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+      clearInterval(timer);
+    };
+  }, []);
+
+  const handleCopyPromo = (code: string) => {
+    navigator.clipboard.writeText(code);
+    setCopiedCode(code);
+    setTimeout(() => setCopiedCode(null), 3000);
+  };
+
   return (
     <>
       <style>{globalStyles}</style>
       <div className="min-h-screen bg-black">
         <Navbar />
-        <HeroSection />
+        <HeroSection
+          eventsCount={events.length}
+          artistsCount={artists.length}
+          hero={settings?.hero}
+        />
         <SponsorsMarqueeSection />
-        <CapabilitiesSection />
-        <FeaturedEventsSection />
-        <HowItWorksSection />
-        <FAQSection />
-        <CTABanner />
+        <CapabilitiesSection items={settings?.capabilities} />
+        <FestivalPostersSection
+          posters={posters}
+          onOpenLightbox={(p) => setLightboxPoster(p)}
+        />
+        <PromosSection
+          promos={promos}
+          onCopy={handleCopyPromo}
+          copiedCode={copiedCode}
+        />
+        <FeaturedEventsSection events={events} />
+        <ArtistsSection artists={artists} />
+        <HowItWorksSection items={settings?.howItWorks} />
+        <FAQSection items={settings?.faqs} />
+        <CTABanner cta={settings?.cta} />
         <Footer />
+        <PosterLightboxModal
+          poster={lightboxPoster}
+          onClose={() => setLightboxPoster(null)}
+        />
       </div>
     </>
   );

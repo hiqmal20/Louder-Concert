@@ -118,6 +118,17 @@ const navSections = [
           </svg>
         ),
       },
+      {
+        href: "/dashboard/scanner",
+        label: "Scan Gate Pass",
+        icon: (
+          <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.75">
+            <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" strokeLinecap="round" strokeLinejoin="round" />
+            <rect x="7" y="7" width="10" height="10" rx="1.5" />
+            <path d="M10 12h4" strokeLinecap="round" />
+          </svg>
+        ),
+      },
     ],
   },
   {

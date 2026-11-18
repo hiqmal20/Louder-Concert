@@ -4,8 +4,8 @@ export const getAll = async (req, res, next) => {
   try {
     const { status } = req.query;
     let sql = `
-      SELECT fp.*, e.name AS event_name, e.venue AS event_venue_db, e.event_date AS event_date_db,
-             COALESCE((SELECT MIN(tc.price) FROM ticket_categories tc WHERE tc.event_id = fp.event_id), 150000) AS min_price
+      SELECT fp.*, e.name AS event_name, e.venue AS event_venue_db, e.city AS event_city_db, e.event_date AS event_date_db,
+             COALESCE((SELECT MIN(tc.price) FROM ticket_categories tc WHERE tc.event_id = fp.event_id AND tc.price > 0), 0) AS min_price
       FROM festival_posters fp
       LEFT JOIN events e ON e.id = fp.event_id
     `;
@@ -24,7 +24,8 @@ export const getAll = async (req, res, next) => {
 export const getOne = async (req, res, next) => {
   try {
     const [rows] = await db.query(
-      `SELECT fp.*, e.name AS event_name
+      `SELECT fp.*, e.name AS event_name,
+              COALESCE((SELECT MIN(tc.price) FROM ticket_categories tc WHERE tc.event_id = fp.event_id AND tc.price > 0), 0) AS min_price
        FROM festival_posters fp
        LEFT JOIN events e ON e.id = fp.event_id
        WHERE fp.id = ?`,

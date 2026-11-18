@@ -2,8 +2,8 @@ import db from "../database.js";
 import midtransClient from "midtrans-client";
 
 const getSnapClient = () => {
-  const serverKey = process.env.MIDTRANS_SERVER_KEY || "SB-Mid-server-GwUP_WGbJPXsDzsNEBRs8IYA";
-  const clientKey = process.env.MIDTRANS_CLIENT_KEY || "SB-Mid-client-61XuGAwQ8Bj8LxSS";
+  const serverKey = (process.env.MIDTRANS_SERVER_KEY || "SB-Mid-server-GwUP_WGbJPXsDzsNEBRs8IYA").trim();
+  const clientKey = (process.env.MIDTRANS_CLIENT_KEY || "SB-Mid-client-61XuGAwQ8Bj8LxSS").trim();
   return new midtransClient.Snap({
     isProduction: process.env.MIDTRANS_IS_PRODUCTION === "true",
     serverKey,
@@ -146,14 +146,14 @@ export const getMidtransToken = async (req, res, next) => {
       },
       customer_details: {
         first_name: order.customer_name || "Customer",
-        email: order.customer_email,
+        email: order.customer_email && order.customer_email.includes("@") ? order.customer_email : "customer@example.com",
         phone: order.customer_phone || "08123456789",
       },
       item_details: items.map((it) => ({
         id: String(it.ticket_category_id),
         price: Math.round(Number(it.price)),
         quantity: it.quantity,
-        name: `${order.event_name} - ${it.category_name}`.slice(0, 50),
+        name: `${order.event_name || "Event"} - ${it.category_name || "Tiket"}`.slice(0, 50),
       })),
     };
 
@@ -166,31 +166,48 @@ export const getMidtransToken = async (req, res, next) => {
       });
     }
 
+    // Validasi Aturan Resmi Midtrans Docs:
+    // gross_amount HARUS sama persis dengan total penjumlahan item_details.
+    // Jika ada selisih diskon/pembulatan, hapus item_details agar transaksi tetap lolos (item_details bersifat optional).
+    const calculatedItemsTotal = parameter.item_details.reduce(
+      (sum, it) => sum + it.price * it.quantity,
+      0
+    );
+    if (calculatedItemsTotal !== parameter.transaction_details.gross_amount) {
+      delete parameter.item_details;
+    }
+
     try {
       const transaction = await snap.createTransaction(parameter);
       await db.query("UPDATE orders SET midtrans_tx_id = ? WHERE id = ?", [transactionId, order.id]);
-      res.json({
+      return res.json({
         token: transaction.token,
         redirect_url: transaction.redirect_url,
         order_id: order.id,
         order_code: order.order_code,
         midtrans_tx_id: transactionId,
         gross_amount: order.total_amount,
-        client_key: process.env.MIDTRANS_CLIENT_KEY || "SB-Mid-client-61XuGAwQ8Bj8LxSS",
+        client_key: (process.env.MIDTRANS_CLIENT_KEY || "SB-Mid-client-61XuGAwQ8Bj8LxSS").trim(),
       });
-    } catch {
-      // Fallback sandbox simulation token
-      const dummyToken = `snap-token-${order.order_code}-${Date.now()}`;
+    } catch (midtransErr) {
+      console.warn(
+        "Midtrans API ditolak (401/403/Access Denied). Mengaktifkan fallback portal simulasi UKK:",
+        midtransErr?.ApiResponse || midtransErr?.message
+      );
+
+      // Mode cadangan simulasi UKK: Memastikan alur pengujian demo aplikasi tetap 100% lancar
+      // tanpa terblokir masalah verifikasi KTP/merchant Midtrans
       await db.query("UPDATE orders SET midtrans_tx_id = ? WHERE id = ?", [transactionId, order.id]);
-      res.json({
-        token: dummyToken,
-        redirect_url: `https://app.sandbox.midtrans.com/snap/v2/vtweb/${dummyToken}`,
+      return res.json({
+        token: `sim-${transactionId}`,
+        redirect_url: null,
+        is_simulation: true,
         order_id: order.id,
         order_code: order.order_code,
         midtrans_tx_id: transactionId,
         gross_amount: order.total_amount,
-        client_key: process.env.MIDTRANS_CLIENT_KEY || "SB-Mid-client-61XuGAwQ8Bj8LxSS",
-        sandbox_notice: "Running in sandbox simulation mode",
+        client_key: (process.env.MIDTRANS_CLIENT_KEY || "SB-Mid-client-61XuGAwQ8Bj8LxSS").trim(),
+        message: "Mode simulasi pembayaran UKK aktif.",
       });
     }
   } catch (err) {
@@ -213,10 +230,21 @@ export const simulateMidtransPayment = async (req, res, next) => {
       return res.status(403).json({ message: "Akses ditolak" });
     }
 
-    const [payResult] = await conn.query(
-      "INSERT INTO payments (order_id, method, amount, proof_url, status, verified_at) VALUES (?,?,?,?,?,NOW())",
-      [order_id, method, order.total_amount, "/uploads/midtrans-settlement.png", "verified"]
-    );
+    const [existingPayments] = await conn.query("SELECT id FROM payments WHERE order_id=?", [order_id]);
+    let paymentId;
+    if (existingPayments.length > 0) {
+      paymentId = existingPayments[0].id;
+      await conn.query(
+        "UPDATE payments SET method=?, amount=?, status='verified', verified_at=NOW() WHERE id=?",
+        [method, order.total_amount, paymentId]
+      );
+    } else {
+      const [payResult] = await conn.query(
+        "INSERT INTO payments (order_id, method, amount, proof_url, status, verified_at) VALUES (?,?,?,?,?,NOW())",
+        [order_id, method, order.total_amount, "/uploads/midtrans-settlement.png", "verified"]
+      );
+      paymentId = payResult.insertId;
+    }
 
     await conn.query("UPDATE orders SET status=? WHERE id=?", ["verified", order_id]);
     await generateTickets(conn, order_id);
@@ -224,9 +252,10 @@ export const simulateMidtransPayment = async (req, res, next) => {
     await conn.commit();
     res.json({
       success: true,
-      message: "Pembayaran Midtrans berhasil diproses dan e-ticket telah diterbitkan!",
-      payment_id: payResult.insertId,
+      message: `Pembayaran via ${method} berhasil diproses dan e-ticket telah diterbitkan!`,
+      payment_id: paymentId,
       order_id,
+      method,
       status: "verified",
     });
   } catch (err) {
